@@ -35,3 +35,21 @@ create policy "update own data" on public.channel_data
 
 create policy "delete own data" on public.channel_data
   for delete using (auth.uid() = user_id);
+
+-- Defence in depth. The app only ever touches this table while signed in, so
+-- take it away from the anonymous role altogether. Supabase grants both `anon`
+-- and `authenticated` full table privileges by default and relies purely on
+-- RLS; this way, if RLS were ever switched off by accident, an unauthenticated
+-- request is still refused instead of dumping every row.
+revoke all on public.channel_data from anon;
+grant select, insert, update, delete on public.channel_data to authenticated;
+
+-- ------------------------------------------------------------------
+-- Sanity check (optional): run these two and confirm the output.
+--   1) rls_enabled should be true
+--   2) four policies, one each for select / insert / update / delete
+-- ------------------------------------------------------------------
+-- select relrowsecurity as rls_enabled
+--   from pg_class where oid = 'public.channel_data'::regclass;
+-- select policyname, cmd from pg_policies
+--   where schemaname = 'public' and tablename = 'channel_data' order by cmd;

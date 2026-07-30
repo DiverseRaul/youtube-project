@@ -189,7 +189,25 @@ It needs somewhere to keep the data. That's a free **Supabase** project — you 
 5. Either paste them into `js/config.js` and push (best — then every device you open the site on is already set up), or paste them into the app itself: **Backup → Sync across devices**.
 6. In the app, enter an email + password and hit **Create account**. On your other device, open the same site and **Sign in** with the same details.
 
-> **Is it safe to commit the anon key?** Yes — that key is designed to be public, and it's what `sql/setup.sql` assumes. The row-level security policies mean a signed-in account can only ever read and write **its own** row. Never paste the `service_role` key anywhere; that one *is* a secret.
+### Is it safe to commit the anon key?
+
+Yes — and more to the point, **you can't hide it anyway.** Anything the browser needs in order to make a request, the person using the browser can read: devtools → Network, or View Source. Typing the key into the app instead of committing it hides it from GitHub, not from anyone visiting the site.
+
+That's fine, because the anon key isn't a password. It's a JWT whose whole payload is `{"role": "anon"}` — it identifies your project and says *"this request is from someone not signed in."* The security boundary is the row-level security policy, and it's absolute: every policy requires `auth.uid() = user_id`, so an unauthenticated caller matches **zero rows**. Someone who signs up in your project gets their own row and cannot address yours.
+
+Two things worth doing anyway:
+
+- **Turn off new signups once your accounts exist.** *Authentication → Sign In / Providers → Allow new users to sign up* → off. The anon key lets anyone reach your project's auth endpoints, so without this someone could create accounts against your quota (they still couldn't see your data). This is the single highest-value hardening step.
+- `sql/setup.sql` also **revokes the table from the `anon` role** outright and grants it only to `authenticated`. Supabase's defaults hand both roles full table privileges and lean entirely on RLS; this way a mistake — RLS accidentally switched off — still fails closed instead of dumping every row.
+
+What genuinely *is* secret, and must never appear in the app, a commit, or a screenshot:
+
+- the **`service_role`** key (bypasses RLS completely — it's a master key)
+- your **database password**
+
+Your sign-in token is kept in `localStorage`, which is standard for a browser app. The risk there is script injection, so every user-typed value the app renders — video titles, descriptions, scenario names — is HTML-escaped, including inside attributes.
+
+If you truly wanted the key off the page you'd need a server in front of Supabase (say a Cloudflare Worker) — but that server would then need its own credential in the browser, so it moves the problem rather than solving it. Not worth it here.
 
 **How it behaves**
 

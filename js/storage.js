@@ -304,7 +304,11 @@
   // doubles as "edit this reading".
   function addVideoSnapshot(snap) {
     load();
-    beginRealEdit();
+    // Logging a reading against one of the DEMO videos is still playing with
+    // the demo. Clearing it here would delete the very video this reading
+    // belongs to and leave the reading pointing at nothing.
+    var onDemoVideo = state.isSample && state.videos.some(function (v) { return v.id === snap.videoId; });
+    if (!onDemoVideo) beginRealEdit();
     var clean = cleanVideoSnapshot(snap);
     var idx = -1;
     for (var i = 0; i < state.videoSnapshots.length; i++) {
@@ -314,7 +318,7 @@
     else state.videoSnapshots.push(clean);
     state.videoSnapshots.sort(byDate);
     untomb("vsnap", clean.videoId + "|" + clean.date);
-    save();
+    save(onDemoVideo ? { keepSample: true } : undefined);
   }
   function deleteVideoSnapshot(videoId, date) {
     load();
