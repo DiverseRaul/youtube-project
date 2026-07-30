@@ -100,6 +100,51 @@ p { margin: 0; }
 }
 .card-head { display: flex; align-items: center; gap: 10px; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; }
 .card-head h3 { display: flex; align-items: center; gap: 8px; }
+.card-head.plain { justify-content: flex-start; }
+
+/* ---------- Collapsibles ----------
+   Secondary detail is folded away by default so each screen shows a few
+   things well instead of everything at once. */
+details.collapse, details.sub-collapse { }
+details.collapse > summary, details.sub-collapse > summary {
+  display: flex; align-items: center; gap: 10px; justify-content: space-between;
+  cursor: pointer; list-style: none; font-weight: 700; color: var(--text);
+}
+details.collapse > summary::-webkit-details-marker,
+details.sub-collapse > summary::-webkit-details-marker { display: none; }
+details.collapse > summary::after, details.sub-collapse > summary::after {
+  content: "▾"; color: var(--muted); font-size: .8rem; transition: transform .18s ease; margin-left: auto;
+}
+details.collapse[open] > summary::after, details.sub-collapse[open] > summary::after { transform: rotate(180deg); }
+details.collapse > summary:hover .sum-title, details.sub-collapse > summary:hover .sum-title { color: var(--accent); }
+.sum-title { display: flex; align-items: center; gap: 8px; font-size: 1.02rem; }
+.sum-hint { font-weight: 500; font-size: .82rem; }
+details.collapse[open] > summary { margin-bottom: 14px; }
+details.sub-collapse {
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 10px 12px; margin: 4px 0 14px;
+}
+details.sub-collapse > summary { font-size: .9rem; }
+details.sub-collapse[open] > summary { margin-bottom: 10px; }
+.form-grid > details.sub-collapse { grid-column: 1 / -1; }
+.form-grid.inner { margin-top: 2px; }
+
+/* Small labelled divider inside a form, to group fields into a few chunks. */
+.form-sep { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; margin: 6px 0 -4px; }
+.form-sep span { font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; }
+.form-sep::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+
+/* ---------- Chips (horizon picker) ---------- */
+.chip-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.chip {
+  background: var(--bg-elev); border: 1px solid var(--border); color: var(--text-dim);
+  padding: 7px 14px; border-radius: 999px; cursor: pointer; font-size: .85rem; font-weight: 600;
+  font-family: inherit; transition: all .15s;
+}
+.chip:hover { border-color: var(--accent); color: var(--text); }
+.chip.active { background: var(--brand); border-color: var(--brand); color: #fff; }
+.chip-date { display: flex; align-items: center; gap: 8px; font-size: .82rem; color: var(--muted); }
+.chip-date > input { display: inline-block; width: auto; margin-top: 0; padding: 6px 10px; font-size: .85rem; }
 
 /* ---------- Stat tiles ---------- */
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 18px; }
@@ -120,7 +165,10 @@ p { margin: 0; }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px 16px; align-items: end; }
 .form-title { grid-column: 1 / -1; }
 .col-2 { grid-column: span 2; }
-label { display: flex; flex-direction: column; gap: 6px; font-size: .85rem; color: var(--text-dim); font-weight: 600; }
+/* Block, not flex: the caption and its "?" stay on one line, and the field
+   sits underneath at full width. */
+label { display: block; font-size: .85rem; color: var(--text-dim); font-weight: 600; }
+label > input, label > select, label > textarea { display: block; width: 100%; margin-top: 6px; }
 input, select, textarea {
   background: var(--bg-elev); border: 1px solid var(--border); color: var(--text);
   padding: 10px 12px; border-radius: var(--radius-sm); font-size: .95rem; font-family: inherit;
@@ -209,12 +257,41 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .milestone { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: var(--bg-elev); border-radius: var(--radius-sm); }
 .milestone .eta { font-weight: 700; }
 
-/* ---------- Videos ---------- */
-.video-list { display: grid; gap: 10px; }
-.video-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; background: var(--bg-elev); border-radius: var(--radius-sm); border: 1px solid var(--border); }
-.video-item .meta { display: flex; align-items: center; gap: 10px; min-width: 0; }
+/* ---------- Videos ----------
+   A row is deliberately two lines: what it is, then three numbers. Everything
+   else lives in the panel you get by clicking the row. */
+.video-list { display: grid; gap: 8px; }
+.video-item {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px;
+  background: var(--bg-elev); border-radius: var(--radius-sm); border: 1px solid var(--border);
+  cursor: pointer; transition: border-color .15s ease, background .15s ease;
+}
+.video-item:hover { border-color: var(--accent); }
+.video-item.is-open { border-color: var(--accent); background: var(--bg-card); }
+.video-item .meta { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
 .video-item .vtitle { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.video-item .vsub { font-size: .78rem; color: var(--muted); margin-top: 3px; display: flex; gap: 8px; flex-wrap: wrap; }
+.video-item .vstats { display: flex; gap: 14px; align-items: baseline; flex-shrink: 0; }
+.video-item .vstat { text-align: right; }
+.video-item .vstat b { display: block; font-size: .95rem; font-weight: 700; }
+.video-item .vstat i { font-style: normal; font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.icon-btn {
+  background: none; border: 1px solid transparent; color: var(--muted); cursor: pointer;
+  font-size: .95rem; padding: 5px 7px; border-radius: var(--radius-sm); line-height: 1;
+}
+.icon-btn:hover { border-color: var(--border); color: var(--text); background: var(--bg-card); }
+.icon-btn.danger:hover { color: var(--danger); border-color: var(--danger); }
 .pick-box { width: 17px; height: 17px; flex: 0 0 auto; accent-color: var(--accent); cursor: pointer; }
+@media (max-width: 700px) {
+  .video-item { flex-wrap: wrap; }
+  .video-item .vstats { width: 100%; justify-content: space-between; }
+}
+
+/* At-a-glance numbers above the log form (and reused on the predict tab). */
+.stat-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.stat-strip .cell { background: var(--bg-elev); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 9px 11px; }
+.stat-strip .cell b { display: block; font-size: 1.05rem; font-weight: 800; letter-spacing: -.01em; }
+.stat-strip .cell i { font-style: normal; font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 /* Pasteable stats report — monospace so the history table lines up. */
 .copy-out { width: 100%; font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; font-size: .8rem; line-height: 1.45; white-space: pre; overflow: auto; resize: vertical; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; }
 .type-tag { font-size: .7rem; font-weight: 700; padding: 3px 8px; border-radius: 999px; }
@@ -225,6 +302,12 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .video-log-info .vdesc { color: var(--text); -webkit-line-clamp: 3; margin-bottom: 4px; }
 
 /* ---------- Predict / probability ---------- */
+/* Headline projection above the chart — the answer before the detail. */
+.predict-summary { margin-bottom: 14px; }
+.predict-summary .lead { font-size: 1.15rem; font-weight: 700; line-height: 1.45; }
+.predict-summary .lead .num { color: var(--accent); }
+.predict-summary .sub { font-size: .88rem; color: var(--muted); margin-top: 4px; }
+.predict-summary.warn .lead { font-size: 1rem; font-weight: 600; color: var(--text-dim); }
 .probability-card { display: flex; align-items: center; gap: 24px; }
 .prob-circle {
   --pct: 0; --col: var(--accent);
@@ -242,6 +325,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 
 /* ---------- Charts ---------- */
 .chart-wrap { position: relative; width: 100%; height: 340px; }
+/* Inside a panel that already has numbers above it, the chart is support. */
+.chart-wrap.compact { height: 230px; }
 
 /* ---------- Empty / danger ---------- */
 .empty { padding: 40px; text-align: center; color: var(--muted); background: var(--bg-card); border: 1px dashed var(--border); border-radius: var(--radius); }

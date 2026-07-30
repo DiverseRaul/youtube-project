@@ -153,8 +153,17 @@
 
   /* ---------- high-level forecast used by the UI ---------- */
   // opts: { method: "auto"|"manual", manualRate: number }
+  // A target is optional everywhere: without one you still get the projection,
+  // just no probability or ETA. Returns null when there's nothing to aim at.
+  function cleanTarget(target) {
+    if (target === null || target === undefined || target === "") return null;
+    var n = Number(target);
+    return (isFinite(n) && n > 0) ? n : null;
+  }
+
   function forecast(snapshots, field, targetDate, target, opts) {
     opts = opts || {};
+    target = cleanTarget(target);
     var pts = toPoints(snapshots, field);
     if (pts.length < 2) {
       return { ok: false, reason: "Need at least 2 dated snapshots to forecast. Add more in Daily Log." };
@@ -193,13 +202,16 @@
     var expected = fit.predict(xTarget);
     var low = expected - 1.96 * sd;   // ~95% band
     var high = expected + 1.96 * sd;
-    var probability = probabilityAtLeast(expected, sd, target);
+    var probability = target === null ? null : probabilityAtLeast(expected, sd, target);
 
     // ETA: when does the model first reach the target?
-    var etaX = fit.solveX(target);
-    var etaDate = (etaX !== null && isFinite(etaX)) ? addDays(ref, etaX) : null;
-    // If already past the target, ETA is effectively now/past.
-    if (lastPt.y >= target) etaDate = lastPt.date;
+    var etaDate = null;
+    if (target !== null) {
+      var etaX = fit.solveX(target);
+      etaDate = (etaX !== null && isFinite(etaX)) ? addDays(ref, etaX) : null;
+      // If already past the target, ETA is effectively now/past.
+      if (lastPt.y >= target) etaDate = lastPt.date;
+    }
 
     // Build a smooth projection series from last real date to a bit past target.
     var projStartX = pts[0].x;
@@ -227,6 +239,7 @@
       lastValue: lastPt.y,
       lastDate: lastPt.date,
       target: target,
+      hasTarget: target !== null,
       targetDate: targetDate,
       expected: expected,
       low: Math.max(0, low),
@@ -234,7 +247,7 @@
       sd: sd,
       probability: probability,
       etaDate: etaDate,
-      alreadyHit: lastPt.y >= target,
+      alreadyHit: target !== null && lastPt.y >= target,
       historical: pts,
       projection: projection
     };
@@ -247,7 +260,7 @@
   function forecastFromAverage(start, ratePerDay, fromDate, targetDate, target, field, cv) {
     start = Number(start) || 0;
     ratePerDay = Number(ratePerDay) || 0;
-    target = Number(target) || 0;
+    target = cleanTarget(target);
     cv = (cv === undefined ? 0.35 : cv); // assumed ~35% variation around the average
     var days = daysBetween(fromDate, targetDate);
     if (days < 0) return { ok: false, reason: "Pick a target date in the future." };
@@ -258,10 +271,10 @@
     var sd = Math.abs(ratePerDay) * cv * Math.sqrt(Math.max(1, days));
     var low = Math.max(0, expected - 1.96 * sd);
     var high = expected + 1.96 * sd;
-    var probability = probabilityAtLeast(expected, sd, target);
+    var probability = target === null ? null : probabilityAtLeast(expected, sd, target);
 
-    var etaX = ratePerDay > 0 ? (target - start) / ratePerDay : null;
-    var alreadyHit = start >= target;
+    var etaX = (target !== null && ratePerDay > 0) ? (target - start) / ratePerDay : null;
+    var alreadyHit = target !== null && start >= target;
     var etaDate = alreadyHit ? fromDate
       : ((etaX !== null && isFinite(etaX) && etaX >= 0) ? addDays(fromDate, etaX) : null);
 
@@ -283,7 +296,7 @@
       model: "manual-average", modelLabel: "your typed daily average",
       r2: null, perDayNow: ratePerDay,
       lastValue: start, lastDate: fromDate,
-      target: target, targetDate: targetDate,
+      target: target, hasTarget: target !== null, targetDate: targetDate,
       expected: expected, low: low, high: high, sd: sd,
       probability: probability, etaDate: etaDate, alreadyHit: alreadyHit,
       historical: [{ x: 0, y: start, date: fromDate }],
@@ -298,7 +311,7 @@
       model: o.model, modelLabel: o.modelLabel,
       r2: null, perDayNow: o.perDayNow,
       lastValue: o.start, lastDate: o.fromDate,
-      target: o.target, targetDate: o.targetDate,
+      target: o.target, hasTarget: o.target !== null && o.target !== undefined, targetDate: o.targetDate,
       expected: o.expected, low: o.low, high: o.high, sd: o.sd,
       probability: o.probability, etaDate: o.etaDate, alreadyHit: o.alreadyHit,
       historical: [{ x: 0, y: o.start, date: o.fromDate }],
@@ -325,15 +338,17 @@
   function forecastCompound(start, weeklyPct, fromDate, targetDate, target, field) {
     start = Number(start) || 0;
     var p = Number(weeklyPct) || 0; // fraction, e.g. 0.05 = +5%/week
-    target = Number(target) || 0;
+    target = cleanTarget(target);
     var days = daysBetween(fromDate, targetDate);
     if (days < 0) return { ok: false, reason: "Pick a target date in the future." };
     var cv = 0.35;
     var value = function (x) { return start * Math.pow(1 + p, x / 7); };
     var sdOf = function (x) { return cv * Math.max(0, value(x) - start); };
     var expected = value(days), sd = sdOf(days);
-    var etaX = (p > 0 && start > 0 && target > start) ? 7 * Math.log(target / start) / Math.log(1 + p) : (start >= target ? 0 : null);
-    var alreadyHit = start >= target;
+    var etaX = (target !== null && p > 0 && start > 0 && target > start)
+      ? 7 * Math.log(target / start) / Math.log(1 + p)
+      : ((target !== null && start >= target) ? 0 : null);
+    var alreadyHit = target !== null && start >= target;
     var etaDate = alreadyHit ? fromDate : ((etaX !== null && isFinite(etaX) && etaX >= 0) ? addDays(fromDate, etaX) : null);
     var endX = Math.round(Math.max(days, etaX || 0, 1) * 1.15);
     return buildResult({
@@ -341,7 +356,8 @@
       perDayNow: start * Math.log(1 + p) / 7, start: start, fromDate: fromDate,
       target: target, targetDate: targetDate,
       expected: expected, low: Math.max(0, expected - 1.96 * sd), high: expected + 1.96 * sd, sd: sd,
-      probability: probabilityAtLeast(expected, sd, target), etaDate: etaDate, alreadyHit: alreadyHit,
+      probability: target === null ? null : probabilityAtLeast(expected, sd, target),
+      etaDate: etaDate, alreadyHit: alreadyHit,
       projection: buildProjection(fromDate, endX, value, sdOf)
     });
   }
@@ -352,14 +368,14 @@
   function forecastScenarios(start, worst, likely, best, fromDate, targetDate, target, field) {
     start = Number(start) || 0;
     worst = Number(worst) || 0; likely = Number(likely) || 0; best = Number(best) || 0;
-    target = Number(target) || 0;
+    target = cleanTarget(target);
     var days = daysBetween(fromDate, targetDate);
     if (days < 0) return { ok: false, reason: "Pick a target date in the future." };
     var expected = start + likely * days;
     var lowT = start + worst * days, highT = start + best * days;
     var sd = Math.max(1e-9, (highT - lowT) / (2 * 1.645));
-    var etaX = likely > 0 ? (target - start) / likely : null;
-    var alreadyHit = start >= target;
+    var etaX = (target !== null && likely > 0) ? (target - start) / likely : null;
+    var alreadyHit = target !== null && start >= target;
     var etaDate = alreadyHit ? fromDate : ((etaX !== null && isFinite(etaX) && etaX >= 0) ? addDays(fromDate, etaX) : null);
     var endX = Math.round(Math.max(days, etaX || 0, 1) * 1.15);
     // Band lines ARE the worst/best scenarios (not a statistical band).
@@ -375,7 +391,8 @@
       field: field, model: "scenarios", modelLabel: "best / likely / worst range",
       perDayNow: likely, start: start, fromDate: fromDate, target: target, targetDate: targetDate,
       expected: expected, low: Math.max(0, lowT), high: highT, sd: sd,
-      probability: probabilityAtLeast(expected, sd, target), etaDate: etaDate, alreadyHit: alreadyHit,
+      probability: target === null ? null : probabilityAtLeast(expected, sd, target),
+      etaDate: etaDate, alreadyHit: alreadyHit,
       projection: proj
     });
   }

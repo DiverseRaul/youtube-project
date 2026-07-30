@@ -57,10 +57,12 @@
         // Land at the top of the new section, and keep the active tab in view.
         if (window.scrollTo) window.scrollTo({ top: 0, behavior: "smooth" });
         if (btn.scrollIntoView) btn.scrollIntoView({ block: "nearest", inline: "center" });
-        // Charts must (re)draw when their panel becomes visible.
+        // Charts must (re)draw when their panel becomes visible — a canvas
+        // sized while hidden comes out blank.
         if (id === "charts") renderCharts();
         if (id === "dashboard") renderDashboard();
         if (id === "goals") renderGoals();
+        if (id === "predict") runPredict();
       });
     });
   }
@@ -77,7 +79,7 @@
       applyTheme(next);
       S.updateSettings({ theme: next });
       renderCharts(); // recolor charts for the new theme
-      if ($("#predictResult") && !$("#predictResult").classList.contains("hidden")) lastPredict && drawPredictChart(lastPredict);
+      if (lastPredict) drawPredictChart(lastPredict); // recolor the projection too
     });
   }
 
@@ -495,11 +497,13 @@
       e.preventDefault();
       var d = formData(vform);
       if (!d.title) { toast("Give the video a title.", true); return; }
-      S.addVideo(d);
+      d.durationSec = explain.parseDuration(d.duration);
+      var newId = S.addVideo(d);
       vform.reset();
       $("input[name=publishDate]", vform).value = new Date().toISOString().slice(0, 10);
-      toast("Video added.");
+      toast("Video added — log its first reading below.");
       renderVideos();
+      openVideo(newId);
     });
 
     $("#closeVideoSnap").addEventListener("click", function () {
@@ -508,6 +512,7 @@
     });
 
     $("#leaderboardMetric").addEventListener("change", renderInsights);
+    $("#videoFilter").addEventListener("change", renderVideos);
 
     // Copy stats: nothing ticked means "all of them".
     $("#copyVideoStats").addEventListener("click", function () {
@@ -543,8 +548,11 @@
       var vid = S.getState().videos.filter(function (v) { return v.id === activeVideoId; })[0];
       var isShort = !!vid && vid.type === "short";
 
-      // Duration is typed as mm:ss; stored as seconds.
+      // Durations are typed as mm:ss; stored as seconds.
       d.avgViewDurationSec = explain.parseDuration(d.avgViewDuration);
+      // Length belongs to the video, not to this reading — save it there.
+      var newLen = explain.parseDuration(d.duration);
+      if (vid && newLen !== (vid.durationSec || 0)) S.updateVideo(activeVideoId, { durationSec: newLen });
       var derivedHours = false;
       if (isShort) {
         // Watch hours are meaningless for Shorts — never store a stray value.
@@ -638,47 +646,87 @@
     scrollTo(card);
   }
 
+  // A row shows three numbers, no more: the two that always matter plus the
+  // one that matters for this type. Everything else is one click away.
+  function rowStats(v, sum) {
+    if (!sum.hasData) return [];
+    var out = [
+      { label: "views", value: fmt(sum.latestViews) },
+      { label: "per day", value: explain.fmtRate(sum.viewsPerDay) }
+    ];
+    if (v.type === "short") {
+      if (sum.stayedToWatch) out.push({ label: "stayed", value: explain.fmtPct(sum.stayedToWatch, 0) });
+      else if (sum.latestEngagedViews) out.push({ label: "engaged", value: fmt(sum.latestEngagedViews) });
+      else if (sum.subsGained) out.push({ label: "subs", value: "+" + fmt(sum.subsGained) });
+    } else {
+      if (sum.percentViewed) out.push({ label: "watched", value: explain.fmtPct(sum.percentViewed, 0) });
+      else if (sum.totalWatchHours) out.push({ label: "watch hrs", value: explain.fmtRate(sum.totalWatchHours) });
+      else if (sum.subsGained) out.push({ label: "subs", value: "+" + fmt(sum.subsGained) });
+    }
+    return out;
+  }
+
   function renderVideos() {
     var st = S.getState();
     var list = $("#videoList");
+    var filterEl = $("#videoFilter");
+    var filter = filterEl ? filterEl.value : "all";
+    var shown = st.videos.filter(function (v) { return filter === "all" || v.type === filter; });
+
+    var countEl = $("#videoCount");
+    if (countEl) {
+      countEl.textContent = st.videos.length
+        ? (shown.length === st.videos.length ? "(" + st.videos.length + ")" : "(" + shown.length + " of " + st.videos.length + ")")
+        : "";
+    }
+    // Nudge the add-video form open while there's nothing to look at.
+    var addCard = $("#addVideoCard");
+    if (addCard && !st.videos.length) addCard.open = true;
+
     if (!st.videos.length) {
       list.innerHTML = "<p class='muted'>No videos yet. Add one above to start tracking it.</p>";
       picked = {};
       syncPickUI();
       return;
     }
-    list.innerHTML = st.videos.map(function (v) {
+    if (!shown.length) {
+      list.innerHTML = "<p class='muted'>No " + (filter === "short" ? "Shorts" : "long-form videos") + " yet.</p>";
+      syncPickUI();
+      return;
+    }
+
+    list.innerHTML = shown.map(function (v) {
       var snaps = S.snapshotsForVideo(v.id);
       var sum = vids.summary(v, snaps);
       var typeTag = "<span class='type-tag " + v.type + "'>" + (v.type === "short" ? "SHORT" : "LONG") + "</span>";
-      var when = explain.prettyDate(v.publishDate) + (v.publishTime ? " · " + v.publishTime : "");
-      var stat = "no readings yet";
-      if (sum.hasData) {
-        var bits2 = [fmt(sum.latestViews) + " views", explain.fmtRate(sum.viewsPerDay) + "/day"];
-        if (v.type === "short") {
-          if (sum.latestEngagedViews) bits2.push(fmt(sum.latestEngagedViews) + " engaged");
-          if (sum.stayedToWatch) bits2.push(explain.fmtPct(sum.stayedToWatch) + " stayed");
-        } else if (sum.totalWatchHours) {
-          bits2.push(explain.fmtRate(sum.totalWatchHours) + " watch hrs");
-        }
-        if (sum.avgViewDurationSec) bits2.push(explain.fmtDuration(sum.avgViewDurationSec) + " avg view");
-        stat = bits2.join(" · ");
-      }
-      var desc = v.description ? "<div class='vdesc'>" + esc(v.description) + "</div>" : "";
-      return "<div class='video-item'>" +
-        "<div class='meta'>" +
+
+      var sub = [explain.prettyDate(v.publishDate)];
+      if (v.durationSec) sub.push(explain.fmtDuration(v.durationSec) + " long");
+      sub.push(snaps.length ? snaps.length + (snaps.length === 1 ? " reading" : " readings") : "no readings yet");
+
+      var stats3 = rowStats(v, sum).map(function (s) {
+        return "<span class='vstat'><b>" + s.value + "</b><i>" + s.label + "</i></span>";
+      }).join("");
+
+      return "<div class='video-item" + (activeVideoId === v.id ? " is-open" : "") + "' data-row='" + v.id + "'>" +
         "<input type='checkbox' class='pick-box' data-pick='" + v.id + "'" + (picked[v.id] ? " checked" : "") +
         " title='Tick to include in Copy stats' aria-label='Select " + esc(v.title) + "' />" +
-        typeTag +
+        "<div class='meta'>" + typeTag +
         "<div style='min-width:0'><div class='vtitle'>" + esc(v.title) + "</div>" +
-        desc +
-        "<div class='muted'>" + when + " · " + stat + "</div></div></div>" +
-        "<div class='btn-row'>" +
-        "<button class='btn small' data-open='" + v.id + "'>Log stats</button>" +
-        "<button class='btn ghost small' data-copyv='" + v.id + "'>📋 Copy</button>" +
-        "<button class='btn ghost small' data-delv='" + v.id + "'>Delete</button>" +
-        "</div></div>";
+        "<div class='vsub'>" + sub.map(esc).join(" · ") + "</div></div></div>" +
+        "<div class='vstats'>" + stats3 + "</div>" +
+        "<button class='icon-btn' data-copyv='" + v.id + "' title='Copy this video&#39;s stats'>📋</button>" +
+        "<button class='icon-btn danger' data-delv='" + v.id + "' title='Delete video'>✕</button>" +
+        "</div>";
     }).join("");
+
+    // The whole row opens the log panel — no hunting for a button.
+    $$("[data-row]", list).forEach(function (row) {
+      row.addEventListener("click", function (e) {
+        if (e.target.closest("button, input")) return;
+        openVideo(row.getAttribute("data-row"));
+      });
+    });
 
     $$("[data-pick]", list).forEach(function (cb) {
       cb.addEventListener("change", function () {
@@ -695,9 +743,6 @@
     });
     syncPickUI();
 
-    $$("[data-open]", list).forEach(function (b) {
-      b.addEventListener("click", function () { openVideo(b.getAttribute("data-open")); });
-    });
     $$("[data-delv]", list).forEach(function (b) {
       b.addEventListener("click", function () {
         if (!confirm("Delete this video and all its readings?")) return;
@@ -751,21 +796,31 @@
     var rows = ins.leaderboard(videos2, snapsOf, today, metric);
     var tb = $("#leaderboardTable tbody");
     if (!rows.length) {
-      tb.innerHTML = "<tr><td colspan='9' class='muted'>No videos with readings yet — log stats on a video first.</td></tr>";
+      tb.innerHTML = "<tr><td colspan='7' class='muted'>No videos with readings yet — log stats on a video first.</td></tr>";
     } else {
       tb.innerHTML = rows.map(function (r, i) {
         var v = r.video, p = r.perf;
         var medal = i === 0 ? "🥇" : (i === 1 ? "🥈" : (i === 2 ? "🥉" : (i + 1)));
-        // Views column shows engaged views underneath for Shorts — that's the
-        // number that counts, and it's usually well below the public count.
+        // Views shows engaged views underneath for Shorts — that's the number
+        // that counts, and it's usually well below the public count.
         var viewsCell = fmt(p.latestViews) +
           (p.engagedViews ? "<div class='muted sub-cell'>" + fmt(p.engagedViews) + " engaged</div>" : "");
-        return "<tr><td>" + medal + "</td><td style='text-align:left'>" + esc(v.title) + "</td>" +
-          "<td><span class='type-tag " + v.type + "'>" + (v.type === "short" ? "SHORT" : "LONG") + "</span></td>" +
+        var subsCell = p.subsGained
+          ? "+" + fmt(p.subsGained) + "<div class='muted sub-cell'>" + explain.fmtRate(p.subsPer1kViews) + " /1k views</div>"
+          : "—";
+        // Retention: average view duration, with the type's own second signal.
+        var second = v.type === "short"
+          ? (p.stayedToWatch ? explain.fmtPct(p.stayedToWatch, 0) + " stayed" : "")
+          : (p.percentViewed ? explain.fmtPct(p.percentViewed, 0) + " of video" : "");
+        var retCell = explain.fmtDuration(p.avgViewDurationSec) +
+          (second ? "<div class='muted sub-cell'>" + second + "</div>" : "");
+        return "<tr><td>" + medal + "</td>" +
+          "<td style='text-align:left'><span class='type-tag " + v.type + "'>" +
+          (v.type === "short" ? "SHORT" : "LONG") + "</span> " + esc(v.title) + "</td>" +
           "<td>" + viewsCell + "</td><td>" + explain.fmtRate(p.viewsPerDay) + "</td>" +
-          "<td>" + explain.fmtDuration(p.avgViewDurationSec) + "</td>" +
-          "<td>" + (v.type === "short" ? explain.fmtPct(p.stayedToWatch) : "—") + "</td>" +
-          "<td>" + p.likeRate.toFixed(1) + "%</td><td>" + p.commentRate.toFixed(2) + "%</td></tr>";
+          "<td>" + subsCell + "</td>" +
+          "<td>" + retCell + "</td>" +
+          "<td>" + p.engagementRate.toFixed(1) + "%</td></tr>";
       }).join("");
     }
   }
@@ -790,11 +845,36 @@
     var line = "<span class='type-tag " + video.type + "'>" + (video.type === "short" ? "SHORT" : "LONG") + "</span> ";
     line += "Published " + explain.prettyDate(video.publishDate) + (video.publishTime ? " at " + video.publishTime : "");
     if (daysLive != null) line += " · " + (daysLive <= 0 ? "today" : daysLive + " days ago");
+    if (video.durationSec) line += " · " + explain.fmtDuration(video.durationSec) + " long";
     line += last
-      ? " · last logged <strong>" + fmt(last.views) + "</strong> views on " + explain.prettyDate(last.date)
+      ? " · last read " + explain.prettyDate(last.date)
       : " · no readings yet — add your first below";
     bits.push("<div class='muted'>" + line + "</div>");
     $("#videoLogInfo").innerHTML = bits.join("");
+
+    // The full picture as tiles, so the form below is just for typing.
+    var sum = vids.summary(video, snaps);
+    var strip = [];
+    if (sum.hasData) {
+      strip.push({ label: "views", value: fmt(sum.latestViews) });
+      if (video.type === "short" && sum.latestEngagedViews) strip.push({ label: "engaged", value: fmt(sum.latestEngagedViews) });
+      strip.push({ label: "per day", value: explain.fmtRate(sum.viewsPerDay) });
+      if (sum.subsGained) strip.push({ label: "subs gained", value: "+" + fmt(sum.subsGained) });
+      strip.push({ label: "likes", value: fmt(sum.latestLikes) });
+      strip.push({ label: "comments", value: fmt(sum.latestComments) });
+      if (sum.avgViewDurationSec) {
+        strip.push({ label: "avg view", value: explain.fmtDuration(sum.avgViewDurationSec) });
+      }
+      if (sum.percentViewed) strip.push({ label: "of video", value: explain.fmtPct(sum.percentViewed, 0) });
+      if (video.type === "short") {
+        if (sum.stayedToWatch) strip.push({ label: "stayed", value: explain.fmtPct(sum.stayedToWatch, 0) });
+      } else if (sum.totalWatchHours) {
+        strip.push({ label: "watch hrs", value: explain.fmtRate(sum.totalWatchHours) });
+      }
+    }
+    $("#videoStatStrip").innerHTML = strip.map(function (s) {
+      return "<div class='cell'><b>" + s.value + "</b><i>" + s.label + "</i></div>";
+    }).join("");
 
     // Only ask for the stats that mean something for this video's type.
     var isShort = video.type === "short";
@@ -806,6 +886,10 @@
       if (!mine) $$("input", el).forEach(function (inp) { inp.value = ""; });
     });
 
+    // The video's own length lives on the video, so show what's saved.
+    var durEl = f.querySelector("[name=duration]");
+    if (durEl) durEl.value = video.durationSec ? explain.fmtDuration(video.durationSec) : "";
+
     // Prefill inputs with the last reading as a starting point (easy to bump up).
     if (last) {
       var ph = function (name, txt) {
@@ -813,6 +897,7 @@
         if (el) el.placeholder = "last: " + txt;
       };
       ph("views", fmt(last.views));
+      ph("subsGained", fmt(last.subsGained));
       ph("likes", fmt(last.likes));
       ph("comments", fmt(last.comments));
       ph("avgViewDuration", explain.fmtDuration(last.avgViewDurationSec));
@@ -833,6 +918,7 @@
       cols.push({ th: "Engaged views", get: function (s) { return dash(s.engagedViews, fmt); } });
     }
     cols.push(
+      { th: "Subs", get: function (s) { return s.subsGained ? "+" + fmt(s.subsGained) : "—"; } },
       { th: "Likes", get: function (s) { return fmt(s.likes); } },
       { th: "Comments", get: function (s) { return fmt(s.comments); } },
       { th: "Avg view", get: function (s) { return explain.fmtDuration(s.avgViewDurationSec); } }
@@ -845,6 +931,9 @@
 
     $("#videoSnapTable thead tr").innerHTML =
       cols.map(function (c) { return "<th>" + c.th + "</th>"; }).join("") + "<th></th>";
+    $("#videoHistoryCount").textContent = snaps.length
+      ? snaps.length + (snaps.length === 1 ? " reading" : " readings")
+      : "none yet";
 
     var tbody = $("#videoSnapTable tbody");
     tbody.innerHTML = snaps.length
@@ -870,7 +959,7 @@
           if (el) el.value = (val === 0 || val) ? val : "";
         };
         set("date", s.date); set("views", s.views); set("likes", s.likes);
-        set("comments", s.comments);
+        set("comments", s.comments); set("subsGained", s.subsGained || "");
         set("avgViewDuration", s.avgViewDurationSec ? explain.fmtDuration(s.avgViewDurationSec) : "");
         if (isShort) {
           set("engagedViews", s.engagedViews || "");
@@ -883,6 +972,10 @@
       });
     });
     charts.video("videoChart", vids.viewPoints(snaps), video.title, video.type === "short");
+    // Mark which row is being edited, without a full re-render.
+    $$("#videoList [data-row]").forEach(function (row) {
+      row.classList.toggle("is-open", row.getAttribute("data-row") === id);
+    });
     scrollTo($("#videoSnapshotCard"));
   }
 
@@ -890,11 +983,9 @@
   var lastPredict = null;
   function wirePredictForm() {
     var form = $("#predictForm");
-    var st = S.getState();
-    // Sensible defaults from saved goal.
-    $("input[name=target]", form).value = st.settings.goalSubs || 1000;
-    $("input[name=targetDate]", form).value = st.settings.goalDate ||
-      stats.addDays(new Date().toISOString().slice(0, 10), 90);
+    // No target by default — the chart alone answers "where am I heading?".
+    // The horizon starts at the 3-month chip.
+    setHorizon(90);
 
     function round1(n) { return Math.round((Number(n) || 0) * 10) / 10; }
 
@@ -935,75 +1026,138 @@
       }
     }
 
-    $("#predictMethod").addEventListener("change", toggleMethod);
+    $("#predictMethod").addEventListener("change", function () {
+      toggleMethod();
+      runPredict();
+    });
     $("#predictMetric").addEventListener("change", function () {
       if ($("#predictMethod").value !== "auto") smartPrefill(true);
+      runPredict();
+    });
+
+    // Horizon chips: one click re-draws the future. No submit needed.
+    $$("#horizonChips .chip").forEach(function (chip) {
+      chip.addEventListener("click", function () {
+        setHorizon(Number(chip.getAttribute("data-days")));
+        runPredict();
+      });
+    });
+    $("#predictDate").addEventListener("change", function () {
+      // A typed date wins over the chips.
+      $$("#horizonChips .chip").forEach(function (c) { c.classList.remove("active"); });
+      runPredict();
+    });
+
+    // Everything else recalculates as you type, so nothing has to be "run".
+    var typingTimer = null;
+    form.addEventListener("input", function (e) {
+      if (e.target && e.target.id === "predictDate") return; // handled above
+      clearTimeout(typingTimer);
+      typingTimer = setTimeout(runPredict, 300);
     });
 
     form.addEventListener("submit", function (e) {
       e.preventDefault();
-      var d = formData(form);
-      var snaps = S.getState().channelSnapshots;
-      var today = new Date().toISOString().slice(0, 10);
-      var target = Number(d.target);
-      var tDate = d.targetDate;
-      var start = (d.startValue !== "" && d.startValue != null)
-        ? Number(d.startValue)
-        : (snaps.length ? Number(snaps[snaps.length - 1][d.metric]) || 0 : 0);
-      var r;
-      switch (d.method) {
-        case "compound":
-          if (!d.weeklyPct) { toast("Enter a weekly % growth.", true); return; }
-          r = stats.forecastCompound(start, Number(d.weeklyPct) / 100, today, tDate, target, d.metric);
-          break;
-        case "scenarios":
-          if (!d.likelyRate) { toast("Enter at least a 'likely per day' rate.", true); return; }
-          r = stats.forecastScenarios(start, Number(d.worstRate), Number(d.likelyRate), Number(d.bestRate), today, tDate, target, d.metric);
-          break;
-        case "posting":
-          if (!d.uploadsPerWeek || !d.perUpload) { toast("Enter uploads/week and gain per upload.", true); return; }
-          r = stats.forecastFromPosting(start, Number(d.uploadsPerWeek), Number(d.perUpload), today, tDate, target, d.metric);
-          break;
-        case "steady":
-          if (!d.manualRate) { toast("Enter your average per day.", true); return; }
-          r = stats.forecastFromAverage(start, Number(d.manualRate), today, tDate, target, d.metric);
-          break;
-        case "auto":
-        default:
-          r = stats.forecast(snaps, d.metric, tDate, target, { method: "auto" });
-      }
-      lastPredict = r;
-      showPredict(r);
+      runPredict();
     });
 
     toggleMethod(); // set initial field visibility (Smart hides the manual inputs)
+    runPredict();
+  }
+
+  // Point the date input at "N days from today" and light up the matching chip.
+  function setHorizon(days) {
+    var el = $("#predictDate");
+    if (el) el.value = stats.addDays(new Date().toISOString().slice(0, 10), days);
+    $$("#horizonChips .chip").forEach(function (c) {
+      c.classList.toggle("active", Number(c.getAttribute("data-days")) === days);
+    });
+  }
+
+  // Build the forecast from whatever's currently in the form and draw it.
+  function runPredict() {
+    var form = $("#predictForm");
+    if (!form) return;
+    var d = formData(form);
+    var snaps = S.getState().channelSnapshots;
+    var today = new Date().toISOString().slice(0, 10);
+    var target = d.target === "" ? null : Number(d.target);
+    var tDate = d.targetDate || stats.addDays(today, 90);
+    var start = (d.startValue !== "" && d.startValue != null)
+      ? Number(d.startValue)
+      : (snaps.length ? Number(snaps[snaps.length - 1][d.metric]) || 0 : 0);
+    var r = null, need = null;
+    switch (d.method) {
+      case "compound":
+        if (!d.weeklyPct) need = "Type a growth % per week to see the curve.";
+        else r = stats.forecastCompound(start, Number(d.weeklyPct) / 100, today, tDate, target, d.metric);
+        break;
+      case "scenarios":
+        if (!d.likelyRate) need = "Type at least a “likely per day” rate to see the range.";
+        else r = stats.forecastScenarios(start, Number(d.worstRate), Number(d.likelyRate), Number(d.bestRate), today, tDate, target, d.metric);
+        break;
+      case "posting":
+        if (!d.uploadsPerWeek || !d.perUpload) need = "Type your uploads per week and what each one brings in.";
+        else r = stats.forecastFromPosting(start, Number(d.uploadsPerWeek), Number(d.perUpload), today, tDate, target, d.metric);
+        break;
+      case "steady":
+        if (!d.manualRate) need = "Type your average gain per day to see the line.";
+        else r = stats.forecastFromAverage(start, Number(d.manualRate), today, tDate, target, d.metric);
+        break;
+      case "auto":
+      default:
+        r = stats.forecast(snaps, d.metric, tDate, target, { method: "auto" });
+    }
+    if (need) { showPredictNote(need); return; }
+    lastPredict = r;
+    showPredict(r);
+  }
+
+  // Stands in for a forecast when something's missing (no logs yet, or a
+  // manual model without its numbers). Never a dead blank panel.
+  function showPredictNote(msg) {
+    var sum = $("#predictSummary");
+    sum.className = "predict-summary warn";
+    sum.innerHTML = "<div class='lead'>" + msg + "</div>";
+    $("#probCard").classList.add("hidden");
+    $("#predictExplain").innerHTML = "<p class='muted'>" + msg + "</p>";
+    charts.destroyAll();
   }
 
   function showPredict(r) {
-    var box = $("#predictResult");
-    if (!r.ok) {
-      box.classList.remove("hidden");
-      $("#probPct").textContent = "—";
-      $("#probHeadline").textContent = "Not enough data";
-      $("#probRange").textContent = "";
-      $("#predictExplain").innerHTML = "<p>" + r.reason + "</p>";
-      charts.destroyAll();
-      return;
+    if (!r.ok) { showPredictNote(r.reason); return; }
+    var name = explain.metricName(r.field);
+    var sum = $("#predictSummary");
+    sum.className = "predict-summary";
+
+    var lead, sub;
+    if (r.alreadyHit) {
+      lead = "🎉 You've already passed <strong>" + fmt(r.target) + "</strong> " + name + ".";
+      sub = "At " + fmt(r.lastValue) + " as of " + explain.prettyDate(r.lastDate) + " — time for a bigger target.";
+    } else {
+      lead = "By <strong>" + explain.prettyDate(r.targetDate) + "</strong> you're heading for <span class='num'>" +
+        fmt(r.expected) + "</span> " + name + ".";
+      sub = "Likely between " + fmt(r.low) + " and " + fmt(r.high) +
+        " · growing ~" + explain.fmtRate(r.perDayNow) + "/day · " + r.modelLabel;
     }
-    box.classList.remove("hidden");
-    var pct = Math.round(r.probability * 100);
-    var circle = $("#probCircle");
-    circle.style.setProperty("--pct", pct);
-    circle.style.setProperty("--col", pct >= 70 ? "var(--accent-2)" : (pct >= 40 ? "var(--warn)" : "var(--danger)"));
-    $("#probPct").textContent = r.alreadyHit ? "✓" : pct + "%";
-    $("#probHeadline").textContent = r.alreadyHit
-      ? "Target already reached!"
-      : "~" + pct + "% chance by " + explain.prettyDate(r.targetDate);
-    $("#probRange").textContent = r.alreadyHit ? "" :
-      "Expected ≈ " + fmt(r.expected) + " (range " + fmt(r.low) + "–" + fmt(r.high) + ")";
+    sum.innerHTML = "<div class='lead'>" + lead + "</div><div class='sub'>" + sub + "</div>";
+
+    // The odds only mean something once you've named a target.
+    $("#probCard").classList.toggle("hidden", !r.hasTarget);
+    if (r.hasTarget) {
+      var pct = Math.round(r.probability * 100);
+      var circle = $("#probCircle");
+      circle.style.setProperty("--pct", pct);
+      circle.style.setProperty("--col", pct >= 70 ? "var(--accent-2)" : (pct >= 40 ? "var(--warn)" : "var(--danger)"));
+      $("#probPct").textContent = r.alreadyHit ? "✓" : pct + "%";
+      $("#probHeadline").textContent = r.alreadyHit
+        ? "Target already reached!"
+        : "~" + pct + "% chance of " + fmt(r.target) + " by " + explain.prettyDate(r.targetDate);
+      $("#probRange").textContent = r.alreadyHit ? "" :
+        "Expected ≈ " + fmt(r.expected) + " (range " + fmt(r.low) + "–" + fmt(r.high) + ")";
+    }
     $("#predictExplain").innerHTML = explain.explainForecast(r);
     drawPredictChart(r);
-    scrollTo(box);
   }
   function drawPredictChart(r) { charts.projection("predictChart", r); }
 

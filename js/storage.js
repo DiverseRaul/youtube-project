@@ -49,7 +49,7 @@
     var base = emptyState();
     s = s || {};
     base.channelSnapshots = Array.isArray(s.channelSnapshots) ? s.channelSnapshots : [];
-    base.videos = Array.isArray(s.videos) ? s.videos : [];
+    base.videos = (Array.isArray(s.videos) ? s.videos : []).map(cleanVideo);
     // Readings saved before the Shorts stats existed get the new fields at 0.
     base.videoSnapshots = (Array.isArray(s.videoSnapshots) ? s.videoSnapshots : [])
       .map(cleanVideoSnapshot);
@@ -81,6 +81,21 @@
     return Math.min(100, n);
   }
 
+  // A tracked video. durationSec is the video's own length — used to work out
+  // what share of it people actually watch.
+  function cleanVideo(v) {
+    v = v || {};
+    return {
+      id: v.id,
+      title: v.title || "(untitled)",
+      type: v.type === "short" ? "short" : "long",
+      publishDate: v.publishDate || "",
+      publishTime: v.publishTime || "",
+      description: v.description || "",
+      durationSec: Math.max(0, Math.round(num(v.durationSec, 0)))
+    };
+  }
+
   // One reading for one video. Long-form and Shorts don't share a stat sheet:
   // watch hours only mean something for long-form, engaged views + "stayed to
   // watch" only for Shorts. Average view duration is the one retention number
@@ -93,6 +108,8 @@
       views: num(snap.views, 0),
       likes: num(snap.likes, 0),
       comments: num(snap.comments, 0),
+      // Subscribers this one video brought in — tracked for both types.
+      subsGained: num(snap.subsGained, 0),
       avgViewDurationSec: Math.max(0, Math.round(num(snap.avgViewDurationSec, 0))),
       watchHours: num(snap.watchHours, 0),
       engagedViews: num(snap.engagedViews, 0),
@@ -174,16 +191,26 @@
   function addVideo(v) {
     load();
     var id = "v" + Date.now() + Math.floor(Math.random() * 1000);
-    state.videos.push({
-      id: id,
-      title: v.title,
-      type: v.type === "short" ? "short" : "long",
-      publishDate: v.publishDate,
-      publishTime: v.publishTime || "",
-      description: v.description || ""
-    });
+    var clean = cleanVideo(v);
+    clean.id = id;
+    state.videos.push(clean);
     save();
     return id;
+  }
+  // Patch fields on an existing video (used to fill in a length later on).
+  function updateVideo(id, patch) {
+    load();
+    for (var i = 0; i < state.videos.length; i++) {
+      if (state.videos[i].id !== id) continue;
+      var merged = {};
+      Object.keys(state.videos[i]).forEach(function (k) { merged[k] = state.videos[i][k]; });
+      Object.keys(patch || {}).forEach(function (k) { merged[k] = patch[k]; });
+      merged.id = id;
+      state.videos[i] = cleanVideo(merged);
+      save();
+      return state.videos[i];
+    }
+    return null;
   }
   function deleteVideo(id) {
     load();
@@ -316,6 +343,7 @@
     deleteSnapshot: deleteSnapshot,
     latestSnapshot: latestSnapshot,
     addVideo: addVideo,
+    updateVideo: updateVideo,
     deleteVideo: deleteVideo,
     addVideoSnapshot: addVideoSnapshot,
     deleteVideoSnapshot: deleteVideoSnapshot,

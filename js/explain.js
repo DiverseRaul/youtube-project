@@ -99,6 +99,15 @@
     parts.push("<p>Your <strong>" + name + "</strong> are " + dir + " about <strong>" +
       fmtRate(r.perDayNow) + "/day</strong> right now, " + modelBit + qualBit + ".</p>");
 
+    // 2a) No target set: just say where this pace lands you, and stop.
+    if (!r.hasTarget) {
+      parts.push("<p>By <strong>" + prettyDate(r.targetDate) + "</strong> that puts you at roughly <strong>" +
+        fmt(r.expected) + "</strong> " + name + " — most likely between <strong>" + fmt(r.low) +
+        "</strong> and <strong>" + fmt(r.high) + "</strong>.</p>");
+      parts.push("<p class='muted'>Want odds instead of a range? Open <strong>Aim at a target</strong> above and type a number you're chasing — you'll get the % chance of hitting it by this date. The band widens the further out you look, because it has to.</p>");
+      return parts.join("");
+    }
+
     // 2) When you'd hit the target
     if (r.etaDate) {
       parts.push("<p>At this pace you'd reach <strong>" + fmt(r.target) + " " + name +

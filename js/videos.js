@@ -6,12 +6,22 @@
 
   var stats = window.YT.stats;
 
+  // Average view duration as a share of the video's length. Capped at 100 —
+  // YouTube's averages can drift slightly above the length on loops/replays.
+  function percentViewed(video, snap) {
+    var len = video && Number(video.durationSec) || 0;
+    var avg = snap && Number(snap.avgViewDurationSec) || 0;
+    if (!len || !avg) return 0;
+    return Math.min(100, avg / len * 100);
+  }
+
   // Summary numbers for one video from its (date-sorted) snapshots.
   function summary(video, snaps) {
     if (!snaps.length) {
       return {
         latestViews: 0, viewsPerDay: 0, totalWatchHours: 0, days: 0,
-        latestEngagedViews: 0, avgViewDurationSec: 0, stayedToWatch: 0, hasData: false
+        latestEngagedViews: 0, avgViewDurationSec: 0, stayedToWatch: 0,
+        subsGained: 0, percentViewed: 0, hasData: false
       };
     }
     var first = snaps[0], last = snaps[snaps.length - 1];
@@ -30,6 +40,9 @@
       stayedToWatch: last.stayedToWatch || 0,
       // Both types.
       avgViewDurationSec: last.avgViewDurationSec || 0,
+      subsGained: last.subsGained || 0,
+      // Share of the video people watch on average — needs the video's length.
+      percentViewed: percentViewed(video, last),
       viewsPerDay: perDay,
       days: days,
       hasData: true
@@ -54,6 +67,7 @@
 
     L.push("### Video " + index + " of " + total + ": " + video.title);
     L.push("Type: " + (isShort ? "Short (vertical, <3 min)" : "Long-form"));
+    L.push("Length: " + (video.durationSec ? E.fmtDuration(video.durationSec) + " (" + video.durationSec + "s)" : "not logged"));
     var when = "Uploaded: " + (video.publishDate || "unknown");
     if (video.publishTime) when += " at " + video.publishTime;
     if (video.publishDate) {
@@ -75,12 +89,15 @@
         (last.engagedViews && last.views ? " (" + E.fmtPct(last.engagedViews / last.views * 100, 0) + " of public views)" : ""));
     }
     L.push("- Views per day since upload: " + E.fmtRate(sum.viewsPerDay));
+    L.push("- Subscribers gained: " + (last.subsGained ? E.fmt(last.subsGained) +
+      (last.views ? " (" + E.fmtRate(last.subsGained / last.views * 1000) + " per 1,000 views)" : "") : "not logged"));
     L.push("- Likes: " + E.fmt(last.likes) +
-      (last.views ? " (" + E.fmtPct(last.likes / last.views * 100, 2) + " of views)" : ""));
+      (last.views && last.likes ? " (" + E.fmtPct(last.likes / last.views * 100, 2) + " of views)" : ""));
     L.push("- Comments: " + E.fmt(last.comments) +
-      (last.views ? " (" + E.fmtPct(last.comments / last.views * 100, 2) + " of views)" : ""));
+      (last.views && last.comments ? " (" + E.fmtPct(last.comments / last.views * 100, 2) + " of views)" : ""));
     L.push("- Average view duration: " + E.fmtDuration(last.avgViewDurationSec) +
-      (last.avgViewDurationSec ? " (" + last.avgViewDurationSec + "s)" : ""));
+      (last.avgViewDurationSec ? " (" + last.avgViewDurationSec + "s)" : "") +
+      (sum.percentViewed ? " — " + E.fmtPct(sum.percentViewed, 0) + " of the video" : ""));
     if (isShort) {
       L.push("- Stayed to watch: " + E.fmtPct(last.stayedToWatch));
     } else {
@@ -98,14 +115,14 @@
 
     if (snaps.length > 1) {
       var head = isShort
-        ? ["date", "views", "engaged views", "likes", "comments", "avg view duration", "stayed to watch"]
-        : ["date", "views", "likes", "comments", "avg view duration", "watch hours"];
+        ? ["date", "views", "engaged views", "subs gained", "likes", "comments", "avg view duration", "stayed to watch"]
+        : ["date", "views", "subs gained", "likes", "comments", "avg view duration", "watch hours"];
       L.push("History (" + snaps.length + " readings):");
       L.push("  " + head.join(" | "));
       snaps.forEach(function (s) {
         var row = isShort
-          ? [s.date, s.views, s.engagedViews || 0, s.likes, s.comments, E.fmtDuration(s.avgViewDurationSec), E.fmtPct(s.stayedToWatch)]
-          : [s.date, s.views, s.likes, s.comments, E.fmtDuration(s.avgViewDurationSec), s.watchHours || 0];
+          ? [s.date, s.views, s.engagedViews || 0, s.subsGained || 0, s.likes, s.comments, E.fmtDuration(s.avgViewDurationSec), E.fmtPct(s.stayedToWatch)]
+          : [s.date, s.views, s.subsGained || 0, s.likes, s.comments, E.fmtDuration(s.avgViewDurationSec), s.watchHours || 0];
         L.push("  " + row.join(" | "));
       });
     }
@@ -128,7 +145,8 @@
         "- \"Engaged views\" (Shorts only) is YouTube's strict count used for monetization — always lower than the public view count.",
         "- \"Stayed to watch\" (Shorts only) is the share of viewers who did not swipe away in the first seconds.",
         "- \"Watch hours\" applies to long-form only; it is not tracked for Shorts.",
-        "- Durations are mm:ss.",
+        "- \"Subscribers gained\" is how many subs that single video brought in.",
+        "- Durations are mm:ss. \"% of the video\" = average view duration ÷ video length.",
         ""
       );
     }
@@ -151,6 +169,7 @@
     summary: summary,
     viewPoints: viewPoints,
     splitByType: splitByType,
+    percentViewed: percentViewed,
     videoBlock: videoBlock,
     exportText: exportText
   };

@@ -89,14 +89,19 @@
           <span class="help" data-help="Valid public Shorts ENGAGED views in the past 90 days — the strict count YouTube uses for monetization (not the inflated public view number). Counts toward the 10-million-views path — a real route to getting monetized.">?</span>
           <input type="number" name="shortsViews90d" min="0" step="1" placeholder="e.g. 450000" />
         </label>
-        <label>Long-form RPM ($)
-          <span class="help" data-help="Revenue per 1,000 long-form views that you keep. Typically $3–$6. Used only to estimate earnings.">?</span>
-          <input type="number" name="longRPM" min="0" step="0.01" placeholder="e.g. 4.00" />
-        </label>
-        <label>Shorts RPM ($)
-          <span class="help" data-help="Revenue per 1,000 Shorts views. Typically $0.03–$0.20 — far lower than long-form. Kept separate on purpose.">?</span>
-          <input type="number" name="shortsRPM" min="0" step="0.001" placeholder="e.g. 0.08" />
-        </label>
+        <details class="sub-collapse col-2" id="rpmWrap">
+          <summary><span class="sum-title">💰 Earnings rates</span><span class="muted sum-hint">optional — only used to estimate revenue</span></summary>
+          <div class="form-grid inner">
+            <label>Long-form RPM ($)
+              <span class="help" data-help="Revenue per 1,000 long-form views that you keep. Typically $3–$6. Used only to estimate earnings.">?</span>
+              <input type="number" name="longRPM" min="0" step="0.01" placeholder="e.g. 4.00" />
+            </label>
+            <label>Shorts RPM ($)
+              <span class="help" data-help="Revenue per 1,000 Shorts views. Typically $0.03–$0.20 — far lower than long-form. Kept separate on purpose.">?</span>
+              <input type="number" name="shortsRPM" min="0" step="0.001" placeholder="e.g. 0.08" />
+            </label>
+          </div>
+        </details>
         <div class="form-actions">
           <button type="submit" class="btn primary">Save snapshot</button>
           <button type="reset" class="btn ghost">Clear</button>
@@ -123,86 +128,57 @@
     <section class="panel" id="tab-videos">
       <div class="panel-head">
         <h2>Videos</h2>
-        <p class="muted">Track individual videos over time. Shorts are tagged separately — they don't count toward long-form watch hours.</p>
+        <p class="muted">One row per video — click a row to log or read its stats. Shorts and long-form are measured separately.</p>
       </div>
 
-      <form class="card form-grid" id="videoForm" autocomplete="off">
-        <h3 class="form-title">Add a video</h3>
-        <label class="col-2">Title
-          <input type="text" name="title" placeholder="e.g. My first tutorial" required />
-        </label>
-        <label>Type
-          <select name="type">
-            <option value="long">Long-form video</option>
-            <option value="short">Short</option>
-          </select>
-        </label>
-        <label>Published date
-          <input type="date" name="publishDate" required />
-        </label>
-        <label>Upload time
-          <span class="help" data-help="What time of day you posted it. Handy for spotting whether morning vs evening uploads perform better.">?</span>
-          <input type="time" name="publishTime" />
-        </label>
-        <label class="col-2">What it's about
-          <span class="help" data-help="A short description of the video's topic — just so you remember what it was when you look back.">?</span>
-          <textarea name="description" rows="2" placeholder="e.g. Beginner guide to setting up your first stream"></textarea>
-        </label>
-        <div class="form-actions">
-          <button type="submit" class="btn primary">Add video</button>
-        </div>
-      </form>
+      <details class="card collapse" id="addVideoCard">
+        <summary><span class="sum-title">➕ Add a video</span><span class="muted sum-hint">title, type, length</span></summary>
+        <form class="form-grid" id="videoForm" autocomplete="off">
+          <label class="col-2">Title
+            <input type="text" name="title" placeholder="e.g. My first tutorial" required />
+          </label>
+          <label>Type
+            <select name="type">
+              <option value="long">Long-form video</option>
+              <option value="short">Short</option>
+            </select>
+          </label>
+          <label>Length
+            <span class="help" data-help="How long the video itself is — mm:ss (e.g. 8:42), or just seconds. Used to work out what share of it people actually watch.">?</span>
+            <input type="text" name="duration" inputmode="numeric" placeholder="e.g. 8:42" />
+          </label>
+          <label>Published date
+            <input type="date" name="publishDate" required />
+          </label>
+          <label>Upload time
+            <span class="help" data-help="What time of day you posted it. Handy for spotting whether morning vs evening uploads perform better.">?</span>
+            <input type="time" name="publishTime" />
+          </label>
+          <label class="col-2">What it's about
+            <span class="help" data-help="A short description of the video's topic — just so you remember what it was when you look back.">?</span>
+            <textarea name="description" rows="2" placeholder="e.g. Beginner guide to setting up your first stream"></textarea>
+          </label>
+          <div class="form-actions">
+            <button type="submit" class="btn primary">Add video</button>
+          </div>
+        </form>
+      </details>
 
       <div class="card">
         <div class="card-head">
-          <h3>Your videos</h3>
+          <h3>Your videos <span class="muted" id="videoCount"></span></h3>
           <div class="btn-row">
+            <select id="videoFilter" aria-label="Filter videos by type">
+              <option value="all">All types</option>
+              <option value="long">Long-form only</option>
+              <option value="short">Shorts only</option>
+            </select>
             <button class="btn ghost small" id="pickAllVideos">Select all</button>
             <button class="btn small" id="copyVideoStats">📋 Copy stats</button>
-            <span class="help" data-help="Tick the videos you want, then copy. You get a plain-text report — title, description, upload date, type, views and the full history — ready to paste anywhere: a note, a spreadsheet, or an AI chat to ask questions about your numbers.">?</span>
+            <span class="help" data-help="Tick the videos you want, then copy. You get a plain-text report — title, description, length, upload date, type, views and the full history — ready to paste anywhere: a note, a spreadsheet, or an AI chat to ask questions about your numbers.">?</span>
           </div>
         </div>
         <div id="videoList" class="video-list"></div>
-      </div>
-
-      <div class="card hidden" id="copyOutCard">
-        <div class="card-head">
-          <h3>📋 Copied stats</h3>
-          <div class="btn-row">
-            <button class="btn small" id="copyOutAgain">Copy again</button>
-            <button class="btn ghost small" id="copyOutClose">Close</button>
-          </div>
-        </div>
-        <p class="muted" id="copyOutNote"></p>
-        <textarea id="copyOutText" class="copy-out" rows="14" readonly spellcheck="false"></textarea>
-      </div>
-
-      <div class="card">
-        <div class="card-head">
-          <h3>⏰ Best time &amp; day to post</h3>
-          <span class="help" data-help="Averages your videos' views-per-day grouped by the weekday and time-of-day you uploaded them. More videos = more reliable.">?</span>
-        </div>
-        <div id="bestTimeBody"></div>
-      </div>
-
-      <div class="card">
-        <div class="card-head">
-          <h3>🏆 Video leaderboard</h3>
-          <select id="leaderboardMetric">
-            <option value="viewsPerDay">Rank by views/day</option>
-            <option value="latestViews">Rank by total views</option>
-            <option value="engagementRate">Rank by engagement %</option>
-            <option value="avgViewDurationSec">Rank by avg view duration</option>
-            <option value="stayedToWatch">Rank by stayed to watch % (Shorts)</option>
-            <option value="engagedViews">Rank by engaged views (Shorts)</option>
-          </select>
-        </div>
-        <div class="table-scroll">
-          <table class="data-table" id="leaderboardTable">
-            <thead><tr><th>#</th><th>Video</th><th>Type</th><th>Views</th><th>Views/day</th><th>Avg view</th><th>Stayed</th><th>Likes %</th><th>Comments %</th></tr></thead>
-            <tbody></tbody>
-          </table>
-        </div>
       </div>
 
       <div class="card hidden" id="videoSnapshotCard">
@@ -211,7 +187,9 @@
           <button class="btn ghost small" id="closeVideoSnap">Close</button>
         </div>
         <div id="videoLogInfo" class="video-log-info"></div>
+        <div class="stat-strip" id="videoStatStrip"></div>
         <form class="form-grid" id="videoSnapshotForm" autocomplete="off">
+          <div class="form-sep"><span>The numbers</span></div>
           <label>Date of this reading
             <input type="date" name="date" required />
           </label>
@@ -223,8 +201,18 @@
             <span class="help" data-help="Studio → Analytics → the monetization card for this Short. Engaged views are counted the strict way and are what actually goes toward the 3M / 10M Shorts thresholds — the public view count does not.">?</span>
             <input type="number" name="engagedViews" min="0" step="1" />
           </label>
+          <label>Subscribers gained
+            <span class="help" data-help="How many subscribers this single video brought in, as shown on the video's own analytics. Running total, like the others.">?</span>
+            <input type="number" name="subsGained" min="0" step="1" />
+          </label>
           <label>Likes <input type="number" name="likes" min="0" step="1" /></label>
           <label>Comments <input type="number" name="comments" min="0" step="1" /></label>
+
+          <div class="form-sep"><span>How much they watched</span></div>
+          <label>Video length
+            <span class="help" data-help="The video's own runtime — saved on the video, not on this reading. Lets the app show what share of it people watch.">?</span>
+            <input type="text" name="duration" inputmode="numeric" placeholder="e.g. 8:42" />
+          </label>
           <label>Average view duration
             <span class="help" data-help="Studio → Analytics → Engagement. Type it as YouTube shows it — mm:ss like 4:32 (or 0:18 for a Short) — or just a number of seconds.">?</span>
             <input type="text" name="avgViewDuration" inputmode="numeric" placeholder="e.g. 4:32" />
@@ -239,38 +227,96 @@
           </label>
           <div class="form-actions"><button type="submit" class="btn primary">Save reading</button></div>
         </form>
+        <details class="sub-collapse" id="videoHistoryWrap">
+          <summary><span class="sum-title">📆 All readings</span><span class="muted sum-hint" id="videoHistoryCount"></span></summary>
+          <div class="table-scroll">
+            <table class="data-table" id="videoSnapTable">
+              <thead><tr></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </details>
+        <div class="chart-wrap compact"><canvas id="videoChart"></canvas></div>
+      </div>
+
+      <div class="card hidden" id="copyOutCard">
+        <div class="card-head">
+          <h3>📋 Copied stats</h3>
+          <div class="btn-row">
+            <button class="btn small" id="copyOutAgain">Copy again</button>
+            <button class="btn ghost small" id="copyOutClose">Close</button>
+          </div>
+        </div>
+        <p class="muted" id="copyOutNote"></p>
+        <textarea id="copyOutText" class="copy-out" rows="14" readonly spellcheck="false"></textarea>
+      </div>
+
+      <details class="card collapse">
+        <summary><span class="sum-title">⏰ Best time &amp; day to post</span><span class="muted sum-hint">when your uploads do best</span></summary>
+        <div id="bestTimeBody"></div>
+      </details>
+
+      <details class="card collapse">
+        <summary><span class="sum-title">🏆 Leaderboard</span><span class="muted sum-hint">rank your videos</span></summary>
+        <div class="card-head plain">
+          <select id="leaderboardMetric" aria-label="Rank videos by">
+            <option value="viewsPerDay">Rank by views/day</option>
+            <option value="latestViews">Rank by total views</option>
+            <option value="engagementRate">Rank by engagement %</option>
+            <option value="subsGained">Rank by subscribers gained</option>
+            <option value="subsPer1kViews">Rank by subs per 1,000 views</option>
+            <option value="percentViewed">Rank by % of video watched</option>
+            <option value="avgViewDurationSec">Rank by avg view duration</option>
+            <option value="stayedToWatch">Rank by stayed to watch % (Shorts)</option>
+            <option value="engagedViews">Rank by engaged views (Shorts)</option>
+          </select>
+        </div>
         <div class="table-scroll">
-          <table class="data-table" id="videoSnapTable">
-            <thead><tr></tr></thead>
+          <table class="data-table" id="leaderboardTable">
+            <thead><tr><th>#</th><th>Video</th><th>Views</th><th>Views/day</th><th>Subs</th><th>Retention</th><th>Engaged %</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
-        <div class="chart-wrap"><canvas id="videoChart"></canvas></div>
-      </div>
+      </details>
     </section>
 
     <!-- ============ PREDICT ============ -->
     <section class="panel" id="tab-predict">
       <div class="panel-head">
         <h2>Predict</h2>
-        <p class="muted">Pick something to forecast and a target. You'll get a probability and a plain-English explanation.</p>
+        <p class="muted">Your future, drawn from your own logs. Pick how far ahead to look — a target is optional.</p>
       </div>
 
-      <form class="card form-grid" id="predictForm" autocomplete="off">
-        <label>What do you want to predict?
-          <select name="metric" id="predictMetric">
+      <form id="predictForm" autocomplete="off">
+      <div class="card">
+        <div class="card-head">
+          <h3>Where you're heading</h3>
+          <select name="metric" id="predictMetric" aria-label="What to forecast">
             <option value="totalSubs">Subscribers</option>
             <option value="longformViews">Long-form views</option>
             <option value="watchHoursTotal">Watch hours</option>
             <option value="shortsViews90d">Shorts engaged views (90-day)</option>
           </select>
-        </label>
+        </div>
+        <div class="chip-row" id="horizonChips" role="group" aria-label="How far ahead to forecast">
+          <button type="button" class="chip" data-days="30">1 month</button>
+          <button type="button" class="chip active" data-days="90">3 months</button>
+          <button type="button" class="chip" data-days="180">6 months</button>
+          <button type="button" class="chip" data-days="365">1 year</button>
+          <label class="chip-date">or by
+            <input type="date" name="targetDate" id="predictDate" />
+          </label>
+        </div>
+        <div id="predictSummary" class="predict-summary"></div>
+        <div class="chart-wrap"><canvas id="predictChart"></canvas></div>
+      </div>
+
+      <details class="card collapse" id="predictOptions">
+        <summary><span class="sum-title">🎯 Aim at a target &amp; change the growth model</span><span class="muted sum-hint">optional</span></summary>
+        <div class="form-grid">
         <label>Target value
-          <span class="help" data-help="The number you're aiming for, e.g. 1000 subscribers.">?</span>
-          <input type="number" name="target" min="0" step="1" placeholder="e.g. 1000" required />
-        </label>
-        <label>By what date?
-          <input type="date" name="targetDate" required />
+          <span class="help" data-help="Optional. Give a number you're aiming for — e.g. 1000 subscribers — and you also get the odds of hitting it by the date above. Leave it blank to just see where you're heading.">?</span>
+          <input type="number" name="target" min="0" step="1" placeholder="optional — e.g. 1000" />
         </label>
         <label class="col-2">Growth model
           <span class="help" data-help="Smart uses your logged trend automatically. The others need no logs — pick the shape that matches how you think your channel grows. Growth is rarely a flat line!">?</span>
@@ -310,28 +356,22 @@
           <span class="help" data-help="On average how many of this metric each new video brings in (e.g. 20 subs per video).">?</span>
           <input type="number" name="perUpload" min="0" step="1" placeholder="e.g. 20" />
         </label>
-        <div class="form-actions">
-          <button type="submit" class="btn primary">Predict</button>
         </div>
-      </form>
+      </details>
 
-      <div id="predictResult" class="hidden">
-        <div class="card probability-card">
-          <div class="prob-circle" id="probCircle"><span id="probPct">–</span></div>
-          <div class="prob-text">
-            <h3 id="probHeadline"></h3>
-            <p id="probRange" class="muted"></p>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-head"><h3>What this means</h3></div>
-          <div id="predictExplain" class="explain"></div>
-        </div>
-        <div class="card">
-          <div class="card-head"><h3>Projection</h3></div>
-          <div class="chart-wrap"><canvas id="predictChart"></canvas></div>
+      <div class="card probability-card hidden" id="probCard">
+        <div class="prob-circle" id="probCircle"><span id="probPct">–</span></div>
+        <div class="prob-text">
+          <h3 id="probHeadline"></h3>
+          <p id="probRange" class="muted"></p>
         </div>
       </div>
+
+      <details class="card collapse" id="predictExplainCard" open>
+        <summary><span class="sum-title">💬 What this means</span><span class="muted sum-hint">in plain English</span></summary>
+        <div id="predictExplain" class="explain"></div>
+      </details>
+      </form>
     </section>
 
     <!-- ============ GOALS ============ -->
