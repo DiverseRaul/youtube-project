@@ -33,6 +33,7 @@
     wireGoalForm();
     wireCharts();
     wireBackup();
+    wireSync();
     renderAll();
   });
 
@@ -1399,6 +1400,121 @@
       whatifScenarios.push({ label: "Scenario " + (whatifScenarios.length + 1), rate: 8 });
       renderWhatifRows(); drawWhatifChart();
     });
+  }
+
+  /* ================= SYNC (optional account) =================
+     The app is fully usable with none of this. Everything here just drives
+     the card in the Backup tab; js/sync.js does the actual work. */
+  function wireSync() {
+    var sync = window.YT.sync;
+    if (!sync) return;
+
+    function renderSyncUI(status) {
+      var configured = sync.configured();
+      var user = sync.user();
+      var pill = $("#syncPill"), note = $("#syncNote");
+
+      $("#syncSetup").classList.toggle("hidden", configured);
+      $("#syncAuth").classList.toggle("hidden", !configured || !!user);
+      $("#syncSignedIn").classList.toggle("hidden", !user);
+
+      var label = "off", cls = "sync-pill";
+      if (!configured) {
+        note.textContent = "Not set up. Right now your data stays in this browser — which is fine if you only use one device.";
+      } else if (!user) {
+        var failed = status && status.state === "error";
+        label = failed ? "problem" : "signed out";
+        cls += failed ? " err" : " warn";
+        note.textContent = status && status.message
+          ? status.message
+          : "Sign in and your logs upload to your account, then appear on every device you sign in on.";
+      } else {
+        var when = status && status.lastSyncedAt
+          ? "Last synced " + relativeTime(status.lastSyncedAt) + "."
+          : "";
+        switch (status && status.state) {
+          case "syncing": case "working": label = "syncing…"; cls += " busy"; break;
+          case "error": label = "problem"; cls += " err"; break;
+          case "offline": label = "offline"; cls += " warn"; break;
+          default: label = "synced"; cls += " ok";
+        }
+        note.textContent = "Signed in as " + user.email + ". " +
+          (status && status.state === "error" ? status.message
+            : (status && status.message) || when || "Changes upload automatically.");
+      }
+      pill.textContent = label;
+      pill.className = cls;
+    }
+
+    sync.onStatus(renderSyncUI);
+    // A pull can replace the data underneath the UI, so redraw everything.
+    sync.onPulled(function () {
+      applyTheme(S.getState().settings.theme);
+      renderAll();
+      if ($("#tab-predict").classList.contains("active")) runPredict();
+      toast("Synced — merged what was on your other devices.");
+    });
+
+    $("#syncSaveConfig").addEventListener("click", function () {
+      var res = sync.saveConfig($("#syncUrl").value, $("#syncKey").value);
+      if (!res.ok) { toast(res.error, true); return; }
+      toast("Saved. Now create an account or sign in.");
+      sync.init();
+      renderSyncUI(sync.status());
+    });
+
+    function credentials() {
+      var f = $("#syncAuth");
+      return {
+        email: f.querySelector("[name=email]").value.trim(),
+        password: f.querySelector("[name=password]").value
+      };
+    }
+    function afterAuth(res) {
+      if (!res.ok) { toast(res.error || "Could not sign in.", true); return; }
+      if (res.needsConfirm) { toast("Check your email to confirm the account, then sign in."); return; }
+      $("#syncAuth").querySelector("[name=password]").value = "";
+      renderAll();
+      toast("Signed in — your data is syncing.");
+    }
+
+    $("#syncAuth").addEventListener("submit", function (e) {
+      e.preventDefault();
+      var c = credentials();
+      if (!c.email || !c.password) { toast("Enter your email and password.", true); return; }
+      sync.signIn(c.email, c.password).then(afterAuth);
+    });
+    $("#syncSignUp").addEventListener("click", function () {
+      var c = credentials();
+      if (!c.email || c.password.length < 6) { toast("Enter an email and a password of at least 6 characters.", true); return; }
+      sync.signUp(c.email, c.password).then(afterAuth);
+    });
+    $("#syncNowBtn").addEventListener("click", function () {
+      sync.syncNow().then(function (res) {
+        if (!res.ok && res.error) toast(res.error, true);
+        else if (res.ok) toast("Up to date.");
+      });
+    });
+    $("#syncSignOut").addEventListener("click", function () {
+      sync.signOut().then(function () {
+        renderSyncUI(sync.status());
+        toast("Signed out. Your data is still here on this device.");
+      });
+    });
+
+    sync.init();
+    renderSyncUI(sync.status());
+  }
+
+  // "3 minutes ago" — good enough for a sync timestamp.
+  function relativeTime(iso) {
+    var secs = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
+    if (secs < 45) return "just now";
+    if (secs < 90) return "a minute ago";
+    if (secs < 3600) return Math.round(secs / 60) + " minutes ago";
+    if (secs < 7200) return "an hour ago";
+    if (secs < 86400) return Math.round(secs / 3600) + " hours ago";
+    return explain.prettyDate(iso.slice(0, 10));
   }
 
   /* ================= BACKUP ================= */

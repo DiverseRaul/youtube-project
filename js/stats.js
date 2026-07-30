@@ -74,81 +74,150 @@
     };
   }
 
-  /* ---------- EXPONENTIAL: y = a·e^(b·x)  (fit in log space) ---------- */
-  function expFit(pts) {
-    var usable = pts.filter(function (p) { return p.y > 0; });
-    if (usable.length < 2) return null;
-    var n = usable.length, sx = 0, sly = 0, sxx = 0, sxly = 0;
-    usable.forEach(function (p) {
-      var ly = Math.log(p.y);
-      sx += p.x; sly += ly; sxx += p.x * p.x; sxly += p.x * ly;
-    });
-    var denom = n * sxx - sx * sx;
-    if (denom === 0) return null;
-    var b = (n * sxly - sx * sly) / denom;
-    var lnA = (sly - b * sx) / n;
-    var a = Math.exp(lnA);
-    var predict = function (x) { return a * Math.exp(b * x); };
-    return {
-      type: "exponential", label: "accelerating (compounding) growth",
-      predict: predict, params: { a: a, b: b },
-      r2: rSquared(pts, predict), residualStd: residualStd(pts, predict),
-      slopeAt: function (x) { return b * predict(x); },
-      solveX: function (target) { return (target <= 0 || a <= 0 || b === 0) ? null : Math.log(target / a) / b; }
-    };
+  /* ---------- MOMENTUM: your recent pace, plus the trend in that pace ------
+     Channels don't grow along a perfect straight line, and they very rarely
+     level off for good — they build momentum (or lose a bit of it). So rather
+     than fitting a curve to all of history, this measures the recent per-day
+     pace, measures how that pace has been CHANGING, and carries it forward
+     with the change fading out.
+
+     This is deliberately replacing two models that extrapolated badly:
+       - a raw exponential fit, which turned a good month into "3 billion
+         subscribers by December";
+       - a logistic S-curve, which decided subscriber growth was about to
+         stop dead and flat-lined the forecast.
+     By construction this one can do neither. The acceleration decays
+     geometrically, so the pace approaches a ceiling instead of running away;
+     and the pace approaches a floor above zero instead of dying. */
+  var MOM_PHI = 0.9;          // how fast the acceleration fades, per week
+  var MOM_MAX_WEEKLY = 1.12;  // carry forward at most +12%/week of pace growth
+  var MOM_MIN_WEEKLY = 0.94;  // ...and at worst -6%/week
+
+  function midX(pts) {
+    return pts.reduce(function (a, p) { return a + p.x; }, 0) / pts.length;
+  }
+  function windowSlope(pts) {
+    return pts.length < 2 ? null : linearFit(pts).params.b;
   }
 
-  /* ---------- LOGISTIC: y = L / (1 + e^(-k(x - x0))) ---------- */
-  // No nonlinear solver available, so grid-search the ceiling L and
-  // linearize the rest: ln(y/(L-y)) = k·x - k·x0.
-  // NOTE: all closures (predict/slopeAt/solveX) are built together in
-  // makeLogistic so they bind to the SAME L/k/x0 — building them inline
-  // in the loop would capture the loop's final iteration instead.
-  function makeLogistic(L, k, x0, pts) {
-    var predict = function (x) { return L / (1 + Math.exp(-k * (x - x0))); };
+  function momentumFit(pts) {
+    var n = pts.length;
+    if (n < 3) return null;
+    var w = Math.max(2, Math.min(6, Math.round(n / 2)));
+    var recent = pts.slice(n - w);
+    var prior = pts.slice(Math.max(0, n - 2 * w), n - w);
+    var rRecent = windowSlope(recent);
+    if (rRecent === null) return null;
+    var rPrior = prior.length >= 2 ? windowSlope(prior) : null;
+
+    // Is the pace itself speeding up or slowing down? Expressed per week.
+    var g = 1;
+    if (rPrior !== null && rPrior > 0 && rRecent > 0) {
+      var weeks = Math.max(1, (midX(recent) - midX(prior)) / 7);
+      g = Math.pow(rRecent / rPrior, 1 / weeks);
+      if (!isFinite(g) || g <= 0) g = 1;
+    }
+    g = Math.min(MOM_MAX_WEEKLY, Math.max(MOM_MIN_WEEKLY, g));
+
+    var recentLine = linearFit(recent);
+    var lastX = pts[n - 1].x;
+    // Anchor on the fitted value, not the last raw point, so the projection
+    // joins the history line smoothly instead of jumping at the seam.
+    var anchor = recentLine.predict(lastX);
+    var baseRate = Math.max(0, rRecent);
+
+    // Step forward a day at a time, easing the acceleration out as we go.
+    function walk(days) {
+      var v = anchor, r = baseRate;
+      for (var d = 0; d < days; d++) {
+        v += r;
+        r *= Math.pow(1 + (g - 1) * Math.pow(MOM_PHI, d / 7), 1 / 7);
+      }
+      return { value: v, rate: r };
+    }
+    function predict(x) {
+      if (x <= lastX) return recentLine.predict(x);
+      return walk(Math.round(x - lastX)).value;
+    }
     return {
-      type: "logistic", label: "growth that speeds up then levels off (S-curve)",
-      predict: predict, params: { L: L, k: k, x0: x0 },
-      r2: rSquared(pts, predict), residualStd: residualStd(pts, predict),
-      slopeAt: function (x) { var y = predict(x); return k * y * (1 - y / L); },
+      type: "momentum",
+      label: g > 1.005 ? "your recent pace, still building"
+        : (g < 0.995 ? "your recent pace, cooling off slightly" : "your recent pace"),
+      predict: predict,
+      params: { rate: baseRate, weekly: g },
+      // Measured on the recent window — i.e. how steady your recent pace is,
+      // which is exactly what the forecast is leaning on.
+      r2: rSquared(recent, recentLine.predict),
+      residualStd: residualStd(recent, recentLine.predict),
+      slopeAt: function (x) { return x <= lastX ? baseRate : walk(Math.round(x - lastX)).rate; },
       solveX: function (target) {
-        if (target <= 0 || target >= L) return null;
-        return x0 - Math.log(L / target - 1) / k;
+        if (target <= anchor) return lastX;
+        if (baseRate <= 0 && g <= 1) return null;
+        var v = anchor, r = baseRate;
+        for (var d = 0; d < 365 * 20; d++) {
+          v += r;
+          if (v >= target) return lastX + d + 1;
+          r *= Math.pow(1 + (g - 1) * Math.pow(MOM_PHI, d / 7), 1 / 7);
+        }
+        return null;
       }
     };
   }
-  function logisticFit(pts) {
-    var maxY = Math.max.apply(null, pts.map(function (p) { return p.y; }));
-    if (maxY <= 0) return null;
-    var best = null;
-    for (var f = 1.05; f <= 4.0; f += 0.05) {
-      var L = maxY * f;
-      var usable = pts.filter(function (p) { return p.y > 0 && p.y < L; });
-      if (usable.length < 3) continue;
-      var n = usable.length, sx = 0, sz = 0, sxx = 0, sxz = 0, bad = false;
-      usable.forEach(function (p) {
-        var ratio = p.y / (L - p.y);
-        if (!(ratio > 0)) { bad = true; return; }
-        var z = Math.log(ratio);
-        sx += p.x; sz += z; sxx += p.x * p.x; sxz += p.x * z;
-      });
-      if (bad) continue;
-      var denom = n * sxx - sx * sx;
-      if (denom === 0) continue;
-      var k = (n * sxz - sx * sz) / denom;
-      var intercept = (sz - k * sx) / n; // = -k·x0
-      if (!(k > 0)) continue;            // require growth, not decay
-      var candidate = makeLogistic(L, k, -intercept / k, pts);
-      if (!best || candidate.r2 > best.r2) best = candidate;
+
+  /* ---------- the most this channel could plausibly reach ----------
+     A backstop so no model — now or later — can print a number that dwarfs
+     anything the channel has ever actually done. Four times your best-ever
+     day-rate, sustained every day from here, is already a wild success. */
+  function plausibleCap(pts, xTarget) {
+    var last = pts[pts.length - 1];
+    var maxRate = 0;
+    for (var i = 1; i < pts.length; i++) {
+      var dx = pts[i].x - pts[i - 1].x;
+      if (dx > 0) maxRate = Math.max(maxRate, (pts[i].y - pts[i - 1].y) / dx);
     }
-    return best;
+    var days = Math.max(0, xTarget - last.x);
+    return last.y + Math.max(maxRate * 4, 1) * days + 100;
+  }
+  /* ---------- how wrong could this be? ----------
+     Residual scatter alone makes a tidy history look like a precise future —
+     it produced bands like "1,059 to 1,066 subscribers in three months",
+     which is a promise no forecast can keep. Whatever the history looks like,
+     a projection months out carries real model risk, so the band never
+     shrinks below a share of the growth being projected. */
+  var SD_GAIN_SHARE = 0.18;   // at least ~18% of the projected gain
+  var SD_WALK = 0.3;          // ...and a random-walk term on the pace
+
+  function uncertaintyAt(fit, pts, x, xMax, rangeX) {
+    var extrapolation = Math.max(0, (x - xMax) / rangeX);
+    var base = fit.residualStd * (1 + 0.5 * Math.min(extrapolation, 4));
+    var daysAhead = Math.max(0, x - xMax);
+    if (daysAhead === 0) return base;
+    var gain = Math.max(0, fit.predict(x) - pts[pts.length - 1].y);
+    var floor = Math.max(
+      SD_GAIN_SHARE * gain,
+      SD_WALK * Math.abs(fit.slopeAt(xMax)) * Math.sqrt(daysAhead)
+    );
+    return Math.max(base, floor);
   }
 
-  /* ---------- pick the best model by R² ---------- */
+  function capFit(fit, cap) {
+    return {
+      type: fit.type, label: fit.label + ", held to a realistic ceiling",
+      predict: function (x) { return Math.min(cap, fit.predict(x)); },
+      params: fit.params, r2: fit.r2, residualStd: fit.residualStd,
+      slopeAt: fit.slopeAt, solveX: fit.solveX
+    };
+  }
+
+  /* ---------- pick a model that behaves ---------- */
   function bestFit(pts) {
-    var candidates = [linearFit(pts), expFit(pts), logisticFit(pts)].filter(Boolean);
-    candidates.sort(function (a, b) { return b.r2 - a.r2; });
-    return candidates[0];
+    var lin = linearFit(pts);
+    var mom = momentumFit(pts);
+    if (!mom) return lin;
+    // If the pace is basically constant, the straight line says the same
+    // thing and says it more simply.
+    if (Math.abs(mom.params.weekly - 1) < 0.01) return lin;
+    return mom;
   }
 
   /* ---------- high-level forecast used by the UI ---------- */
@@ -194,14 +263,23 @@
     }
     if (!fit) return { ok: false, reason: "Could not fit a growth model to this data." };
 
+    // Sanity check the whole horizon, not just the model's shape: if it lands
+    // somewhere this channel could not plausibly reach, drop to the straight
+    // line, and if even that is silly, hold it at the ceiling.
+    var cap = plausibleCap(pts, Math.max(xTarget, xMax));
+    if (!usedManual && fit.predict(xTarget) > cap) {
+      var straight = linearFit(pts);
+      fit = straight.predict(xTarget) <= cap ? straight : capFit(straight, cap);
+    }
+
     // Uncertainty grows the further we extrapolate beyond known data.
     var rangeX = Math.max(1, xMax - pts[0].x);
-    var extrapolation = Math.max(0, (xTarget - xMax) / rangeX);
-    var sd = fit.residualStd * (1 + 0.5 * Math.min(extrapolation, 4));
+    var sd = uncertaintyAt(fit, pts, xTarget, xMax, rangeX);
 
-    var expected = fit.predict(xTarget);
+    var expected = Math.min(cap, fit.predict(xTarget));
     var low = expected - 1.96 * sd;   // ~95% band
-    var high = expected + 1.96 * sd;
+    // The optimistic edge of the band gets the same reality check.
+    var high = Math.min(cap, expected + 1.96 * sd);
     var probability = target === null ? null : probabilityAtLeast(expected, sd, target);
 
     // ETA: when does the model first reach the target?
@@ -219,13 +297,13 @@
     var projection = { dates: [], expected: [], low: [], high: [] };
     var step = Math.max(1, Math.round((projEndX - projStartX) / 60));
     for (var x = projStartX; x <= projEndX; x += step) {
-      var e = fit.predict(x);
-      var localExtra = Math.max(0, (x - xMax) / rangeX);
-      var s = fit.residualStd * (1 + 0.5 * Math.min(localExtra, 4));
+      var localCap = plausibleCap(pts, Math.max(x, xMax));
+      var e = Math.min(localCap, fit.predict(x));
+      var s = uncertaintyAt(fit, pts, x, xMax, rangeX);
       projection.dates.push(addDays(ref, x));
       projection.expected.push(e);
-      projection.low.push(x <= xMax ? null : e - 1.96 * s);   // only show band for the future
-      projection.high.push(x <= xMax ? null : e + 1.96 * s);
+      projection.low.push(x <= xMax ? null : Math.max(0, e - 1.96 * s));   // only show band for the future
+      projection.high.push(x <= xMax ? null : Math.min(localCap, e + 1.96 * s));
     }
 
     return {
@@ -438,8 +516,8 @@
     addDays: addDays,
     toPoints: toPoints,
     linearFit: linearFit,
-    expFit: expFit,
-    logisticFit: logisticFit,
+    momentumFit: momentumFit,
+    plausibleCap: plausibleCap,
     bestFit: bestFit,
     normalCDF: normalCDF,
     probabilityAtLeast: probabilityAtLeast,

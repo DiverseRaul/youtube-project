@@ -93,7 +93,7 @@
     var dir = r.perDayNow >= 0 ? "growing" : "shrinking";
     var modelBit = r.usedManual
       ? "using <span class='tag'>" + r.modelLabel + "</span>"
-      : "based on a <span class='tag'>" + r.modelLabel + "</span> pattern";
+      : "based on <span class='tag'>" + r.modelLabel + "</span>";
     var qual = r2Quality(r.r2);
     var qualBit = qual ? " (" + qual + ")" : "";
     parts.push("<p>Your <strong>" + name + "</strong> are " + dir + " about <strong>" +

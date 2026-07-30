@@ -483,8 +483,54 @@
     <section class="panel" id="tab-backup">
       <div class="panel-head">
         <h2>Backup &amp; Data</h2>
-        <p class="muted">Your data lives in this browser only. Export regularly so you never lose it — and to move between devices.</p>
+        <p class="muted">By default your data lives in this browser only — so export regularly. Sign in below and it follows you to every device instead.</p>
       </div>
+
+      <div class="card" id="syncCard">
+        <div class="card-head">
+          <h3>☁️ Sync across devices</h3>
+          <span class="sync-pill" id="syncPill">off</span>
+        </div>
+        <p class="muted" id="syncNote"></p>
+
+        <!-- Shown when no Supabase project is configured yet. -->
+        <div id="syncSetup" class="hidden">
+          <p class="muted">Sync needs a free <a href="https://supabase.com" target="_blank" rel="noopener">Supabase</a> project — it's what stores your data. Create one, run <code>sql/setup.sql</code> in its SQL editor, then paste its details from <strong>Settings → API</strong>:</p>
+          <div class="form-grid">
+            <label class="col-2">Project URL
+              <input type="url" id="syncUrl" placeholder="https://yourproject.supabase.co" />
+            </label>
+            <label class="col-2">Anon public key
+              <span class="help" data-help="The key labelled 'anon' / 'public'. It's designed to be public and is safe to save here — the security rules in sql/setup.sql are what keep your data private. Never paste the service_role key.">?</span>
+              <input type="text" id="syncKey" placeholder="eyJhbGciOi…" />
+            </label>
+            <div class="form-actions"><button type="button" class="btn primary" id="syncSaveConfig">Save settings</button></div>
+          </div>
+        </div>
+
+        <!-- Sign in / create an account. -->
+        <form id="syncAuth" class="form-grid hidden" autocomplete="on">
+          <label>Email
+            <input type="email" name="email" autocomplete="username" placeholder="you@example.com" />
+          </label>
+          <label>Password
+            <input type="password" name="password" autocomplete="current-password" placeholder="at least 6 characters" />
+          </label>
+          <div class="form-actions">
+            <button type="submit" class="btn primary" id="syncSignIn">Sign in</button>
+            <button type="button" class="btn" id="syncSignUp">Create account</button>
+          </div>
+        </form>
+
+        <!-- Signed in. -->
+        <div id="syncSignedIn" class="hidden">
+          <div class="btn-row">
+            <button type="button" class="btn" id="syncNowBtn">Sync now</button>
+            <button type="button" class="btn ghost" id="syncSignOut">Sign out</button>
+          </div>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-head"><h3>Export</h3></div>
         <div class="btn-row">
@@ -517,8 +563,10 @@
   <div id="tooltip" class="tooltip hidden"></div>
 
   <!-- Load order matters: dependencies first, app.js last -->
+  <script src="js/config.js"></script>
   <script src="data/sample.js"></script>
   <script src="js/storage.js"></script>
+  <script src="js/sync.js"></script>
   <script src="js/stats.js"></script>
   <script src="js/explain.js"></script>
   <script src="js/monetization.js"></script>

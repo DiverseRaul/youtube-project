@@ -12,6 +12,11 @@
       channelSnapshots: [],
       videos: [],
       videoSnapshots: [],
+      // Deletions have to travel between devices too, or anything you delete
+      // on one comes back from the other. Each entry: { k: "<kind>:<id>", at }.
+      tombstones: [],
+      // When this device last changed anything — used to settle merge conflicts.
+      lastEdit: "",
       settings: {
         goalSubs: 1000,
         goalDate: "",
@@ -53,6 +58,10 @@
     // Readings saved before the Shorts stats existed get the new fields at 0.
     base.videoSnapshots = (Array.isArray(s.videoSnapshots) ? s.videoSnapshots : [])
       .map(cleanVideoSnapshot);
+    base.tombstones = (Array.isArray(s.tombstones) ? s.tombstones : [])
+      .filter(function (t) { return t && t.k && t.at; })
+      .map(function (t) { return { k: String(t.k), at: String(t.at) }; });
+    base.lastEdit = s.lastEdit || "";
     if (s.settings) {
       base.settings.goalSubs = num(s.settings.goalSubs, base.settings.goalSubs);
       base.settings.goalDate = s.settings.goalDate || "";
@@ -128,16 +137,47 @@
   }
   function byDate(a, b) { return (a.date < b.date) ? -1 : (a.date > b.date ? 1 : 0); }
 
-  function save() {
+  /* ---- Persistence + change notifications --------------------------------
+     Every write in this file ends at save(), which makes it the one place a
+     sync layer has to listen to. save({ silent: true }) writes without
+     stamping or notifying — used when applying data that came FROM the
+     server, so it doesn't bounce straight back. */
+  var listeners = [];
+  function onChange(fn) { if (typeof fn === "function") listeners.push(fn); }
+
+  function save(opts) {
+    opts = opts || {};
+    if (!opts.silent) state.lastEdit = nowISO();
     try { localStorage.setItem(KEY, JSON.stringify(state)); }
     catch (e) { console.warn("Could not save to localStorage:", e); }
+    if (!opts.silent) {
+      listeners.forEach(function (fn) {
+        try { fn(state); } catch (e) { console.warn("change listener failed:", e); }
+      });
+    }
+  }
+
+  function nowISO() { return new Date().toISOString(); }
+
+  // Remember that something was deleted, so the deletion can travel to other
+  // devices instead of being undone by them.
+  function tombstone(kind, id) {
+    var k = kind + ":" + id;
+    state.tombstones = state.tombstones.filter(function (t) { return t.k !== k; });
+    state.tombstones.push({ k: k, at: nowISO() });
+  }
+  // Re-creating something clears its tombstone, or the next merge would
+  // delete it all over again.
+  function untomb(kind, id) {
+    var k = kind + ":" + id;
+    state.tombstones = state.tombstones.filter(function (t) { return t.k !== k; });
   }
 
   function getState() { return load(); }
 
-  function replaceState(newState) {
+  function replaceState(newState, opts) {
     state = normalize(newState);
-    save();
+    save(opts);
     return state;
   }
 
@@ -173,12 +213,14 @@
     if (idx >= 0) state.channelSnapshots[idx] = clean;
     else state.channelSnapshots.push(clean);
     state.channelSnapshots.sort(byDate);
+    untomb("snap", clean.date);
     save();
   }
 
   function deleteSnapshot(date) {
     load();
     state.channelSnapshots = state.channelSnapshots.filter(function (s) { return s.date !== date; });
+    tombstone("snap", date);
     save();
   }
 
@@ -194,6 +236,7 @@
     var clean = cleanVideo(v);
     clean.id = id;
     state.videos.push(clean);
+    untomb("video", id);
     save();
     return id;
   }
@@ -216,6 +259,8 @@
     load();
     state.videos = state.videos.filter(function (v) { return v.id !== id; });
     state.videoSnapshots = state.videoSnapshots.filter(function (s) { return s.videoId !== id; });
+    // One tombstone for the video; its readings are dropped wherever it lands.
+    tombstone("video", id);
     save();
   }
   // Upsert by (videoId, date): re-adding the same date overwrites, so it
@@ -230,6 +275,7 @@
     if (idx >= 0) state.videoSnapshots[idx] = clean;
     else state.videoSnapshots.push(clean);
     state.videoSnapshots.sort(byDate);
+    untomb("vsnap", clean.videoId + "|" + clean.date);
     save();
   }
   function deleteVideoSnapshot(videoId, date) {
@@ -237,6 +283,7 @@
     state.videoSnapshots = state.videoSnapshots.filter(function (s) {
       return !(s.videoId === videoId && s.date === date);
     });
+    tombstone("vsnap", videoId + "|" + date);
     save();
   }
   function snapshotsForVideo(id) {
@@ -337,6 +384,7 @@
   window.YT.storage = {
     getState: getState,
     replaceState: replaceState,
+    onChange: onChange,
     reset: reset,
     clear: clear,
     upsertSnapshot: upsertSnapshot,

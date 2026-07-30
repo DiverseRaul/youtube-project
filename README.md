@@ -2,7 +2,7 @@
 
 A free, no-login website to **track your YouTube stats over time** and **predict** subscribers, views, watch hours, revenue, and monetization — with plain-English probabilities like *"~72% chance of hitting 1,000 subs by Oct 15."*
 
-Everything runs in your browser. **No server, no accounts, no API keys.** You type your numbers in; it does the math and draws the graphs.
+Everything runs in your browser. **No account needed, no API keys.** You type your numbers in; it does the math and draws the graphs. If you want your data on more than one device, there's an [optional sign-in](#️-sync-across-devices-optional) — off by default.
 
 ---
 
@@ -14,6 +14,7 @@ Everything runs in your browser. **No server, no accounts, no API keys.** You ty
 - **Goals** — auto ETAs for every milestone (1k → 1M), a monetization + revenue forecast, and a **what-if** compare chart.
 - **Charts** — trend lines for every metric + a Shorts-vs-long-form revenue split.
 - **Backup** — export/import JSON (full backup), export CSV, and **import CSV** to bulk-load history from a spreadsheet.
+- **Sync** *(optional)* — sign in and your data follows you between phone and PC, merging rather than overwriting. Off unless you set it up.
 
 ### Insights & goal tracking
 - **Goals for any metric** (Goals tab) — set targets for subscribers, long-form views, watch hours, Shorts engaged views, or **monthly revenue ($)**. Each shows a progress bar, a projected date, and an on-track / behind verdict.
@@ -23,7 +24,7 @@ Everything runs in your browser. **No server, no accounts, no API keys.** You ty
 
 ### Growth models (because growth is never a flat line)
 On the **Predict** tab, choose how you think your channel grows:
-- **🤖 Smart** — learns the best-fitting curve from your logged history automatically.
+- **🤖 Smart** — reads your recent pace and its momentum straight from your logs. This is the default and needs nothing typed.
 - **📈 Compounding %** — a snowball (e.g. +5%/week); the curve bends upward over time.
 - **🎯 Best / likely / worst** — enter three daily rates; get a probability across the whole range.
 - **➖ Steady average** — a flat per-day number.
@@ -58,6 +59,7 @@ This gives you a real link (e.g. `https://yourname.github.io/youtube-predictor`)
    css/styles.css
    js/  (all the .js files)
    data/sample.js
+   sql/setup.sql   (only needed if you want device sync)
    ```
 5. Click **Commit changes**.
 6. Go to **Settings → Pages** (left sidebar).
@@ -159,15 +161,42 @@ Your data lives **only in this browser**. If you clear your browser data or swit
 
 ## 🧠 How the predictions work (in plain terms)
 
-The app looks at your history and fits **three growth shapes**, then picks whichever matches your data best:
+The app measures **your recent per-day pace**, then measures **whether that pace is speeding up or slowing down**, and carries both forward — with the acceleration fading the further out it looks. If your pace is essentially constant it just draws the straight line and says so.
 
-- **Steady (linear)** — you gain about the same amount every day.
-- **Accelerating (exponential)** — growth compounds and speeds up.
-- **S-curve (logistic)** — growth speeds up, then levels off.
+Two things it deliberately refuses to do, because both produce nonsense:
 
-It then projects that shape forward to your target date. The **range** and **probability** come from how *bumpy* your past data is: steadier history → tighter range and a more confident percentage. Forecasts far in the future are naturally less certain, so the band widens.
+- **Run away.** Fitting a raw exponential to a good month turns it into "3 billion subscribers by December". Here the acceleration decays geometrically, so your pace approaches a ceiling rather than compounding forever — and on top of that there's a hard backstop: no projection may exceed **four times your best-ever day-rate, sustained every day** from now to the target. Anything wilder is pulled back to that line.
+- **Flat-line.** An S-curve fit decides growth is about to stop dead, which made a year-out subscriber forecast barely higher than today's. Channels build momentum far more often than they hit a wall, so no S-curve is used; a cooling channel is projected as *slowing*, never as *stopping*.
+
+The **range** comes from how bumpy your history is — but never gets narrower than about **18% of the growth being projected**, because a tidy history doesn't make the future precise. (Before that floor, a neat run of logs produced bands like "1,059 to 1,066 subscribers in three months", which is a promise no forecast can keep.) It widens the further ahead you look.
 
 Hover the little **?** icons anywhere in the app for a one-line definition of each term.
+
+---
+
+## ☁️ Sync across devices (optional)
+
+Off by default: with no setup, your data never leaves the browser it was typed into. Turn this on and you sign in on your phone and your PC and see the same logs on both.
+
+It needs somewhere to keep the data. That's a free **Supabase** project — you own it, and it's the only thing you have to create.
+
+**One-time setup**
+
+1. Sign up at [supabase.com](https://supabase.com) and create a project (the free tier is plenty — this stores a few kilobytes).
+2. Open **SQL Editor → New query**, paste the contents of [`sql/setup.sql`](sql/setup.sql), and hit **Run**. That creates the table and the security rules that stop any account reading another's data.
+3. Open **Settings → API** and copy the **Project URL** and the **anon public** key.
+4. Either paste them into `js/config.js` and push (best — then every device you open the site on is already set up), or paste them into the app itself: **Backup → Sync across devices**.
+5. In the app, enter an email + password and hit **Create account**. On your other device, open the same site and **Sign in** with the same details.
+
+> **Is it safe to commit the anon key?** Yes — that key is designed to be public, and it's what `sql/setup.sql` assumes. The row-level security policies mean a signed-in account can only ever read and write **its own** row. Never paste the `service_role` key anywhere; that one *is* a secret.
+
+**How it behaves**
+
+- Your browser stays the source of truth, so the app keeps working with no connection. Changes upload a couple of seconds after you stop typing, and it pulls when you open the page or hit **Sync now**.
+- Two devices **merge** rather than overwrite. Readings are keyed by date (and by video), so logging Monday on your phone and Tuesday on your laptop keeps both. If you edited *the same* day on both, the more recent edit wins that day.
+- **Deletions travel too.** Deleting a video on one device doesn't get resurrected by the other — but re-adding something after you deleted it does stick.
+- **Signing out never deletes anything locally.** Your logs stay in that browser.
+- The status pill in the sync card tells you where you stand: `off`, `signed out`, `syncing…`, `synced`, `offline`, or `problem` with the reason.
 
 ---
 
@@ -196,6 +225,7 @@ A common myth is that "Shorts don't count for monetization." **They do** — jus
 - Plain HTML/CSS/JavaScript — **no build step**, so GitHub Pages just works.
 - Charts via [Chart.js](https://www.chartjs.org/) (loaded from a CDN).
 - Data stored in your browser's `localStorage` under the key `ytPredictor.v1`.
+- Optional sync lives in `js/sync.js` — plain `fetch` against Supabase's REST endpoints, no SDK and no extra CDN script. With `js/config.js` left empty it never touches the network.
 - If YouTube changes its rules, edit the thresholds in `js/monetization.js`.
 
 ## ⚠️ Disclaimer
