@@ -1,6 +1,6 @@
 /* ============================================================
    YouTube Predictor — styles
-   Clean, responsive, light/dark. No frameworks.
+   Clean, responsive, light/dark. No frameworks. Yes
    ============================================================ */
 
 :root {
@@ -11,7 +11,8 @@
   --text: #e8ebf5;
   --text-dim: #9aa3c0;
   --muted: #737c9e;
-  --brand: #ff3b3b;          /* YouTube-ish red accent */
+  --brand: #ff3b3b; 
+  --New: #214fa4;         /* YouTube-ish red accent */
   --accent: #4f8cff;
   --accent-2: #22c98a;
   --warn: #ffb020;
