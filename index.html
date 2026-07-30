@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YouTube Channel Predictor &amp; Tracker</title>
+  <meta name="description" content="Track your YouTube stats over time and predict subscribers, views, watch hours, revenue and monetization with plain-English probabilities." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>" />
+  <link rel="stylesheet" href="css/styles.css" />
+  <!-- Chart.js (loads over HTTPS on GitHub Pages; needs internet the first time) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-logo">📈</span>
+      <div>
+        <h1>YouTube Predictor</h1>
+        <p class="brand-sub">Track &amp; forecast your channel</p>
+      </div>
+    </div>
+    <nav class="tabs" id="tabs" aria-label="Sections">
+      <button class="tab active" data-tab="dashboard">Dashboard</button>
+      <button class="tab" data-tab="log">Daily Log</button>
+      <button class="tab" data-tab="videos">Videos</button>
+      <button class="tab" data-tab="predict">Predict</button>
+      <button class="tab" data-tab="goals">Goals</button>
+      <button class="tab" data-tab="charts">Charts</button>
+      <button class="tab" data-tab="backup">Backup</button>
+    </nav>
+    <button class="theme-toggle" id="themeToggle" title="Toggle light / dark" aria-label="Toggle theme">🌙</button>
+  </header>
+
+  <main class="app-main">
+
+    <!-- ============ DASHBOARD ============ -->
+    <section class="panel active" id="tab-dashboard">
+      <div class="panel-head">
+        <h2>Dashboard</h2>
+        <p class="muted">A snapshot of where your channel stands right now.</p>
+      </div>
+      <div id="dashboardEmpty" class="empty hidden">
+        No data yet. Head to <strong>Daily Log</strong> and add your first snapshot.
+      </div>
+      <div id="dashboardBody">
+        <div id="trackBanner" class="track-banner hidden"></div>
+        <div class="stat-grid" id="statTiles"></div>
+
+        <div class="card">
+          <div class="card-head">
+            <h3>Monetization progress</h3>
+            <span class="help" data-help="YouTube Partner Program (YPP) lets you earn. There are two tiers — see each requirement below.">?</span>
+          </div>
+          <div id="monetizationBody"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3>Next milestones</h3></div>
+          <div id="milestonesBody" class="milestones"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ DAILY LOG ============ -->
+    <section class="panel" id="tab-log">
+      <div class="panel-head">
+        <h2>Daily Log</h2>
+        <p class="muted">Type in your channel totals whenever you check them (daily is best, but any cadence works). Each row is one reading in time.</p>
+      </div>
+
+      <form class="card form-grid" id="snapshotForm" autocomplete="off">
+        <h3 class="form-title">Add / update a snapshot</h3>
+        <label>Date
+          <input type="date" name="date" required />
+        </label>
+        <label>Total subscribers
+          <span class="help" data-help="Your channel's total subscriber count on this date.">?</span>
+          <input type="number" name="totalSubs" min="0" step="1" placeholder="e.g. 640" required />
+        </label>
+        <label>Long-form total views
+          <span class="help" data-help="Lifetime views on your regular (non-Shorts) videos.">?</span>
+          <input type="number" name="longformViews" min="0" step="1" placeholder="e.g. 120000" />
+        </label>
+        <label>Watch hours (last 12 mo)
+          <span class="help" data-help="Valid public watch hours on long-form video in the past 12 months. Counts toward the 4,000-hour monetization path. Shorts do NOT add to this number.">?</span>
+          <input type="number" name="watchHoursTotal" min="0" step="0.1" placeholder="e.g. 1800" />
+        </label>
+        <label>Shorts engaged views (last 90 days)
+          <span class="help" data-help="Valid public Shorts ENGAGED views in the past 90 days — the strict count YouTube uses for monetization (not the inflated public view number). Counts toward the 10-million-views path — a real route to getting monetized.">?</span>
+          <input type="number" name="shortsViews90d" min="0" step="1" placeholder="e.g. 450000" />
+        </label>
+        <label>Long-form RPM ($)
+          <span class="help" data-help="Revenue per 1,000 long-form views that you keep. Typically $3–$6. Used only to estimate earnings.">?</span>
+          <input type="number" name="longRPM" min="0" step="0.01" placeholder="e.g. 4.00" />
+        </label>
+        <label>Shorts RPM ($)
+          <span class="help" data-help="Revenue per 1,000 Shorts views. Typically $0.03–$0.20 — far lower than long-form. Kept separate on purpose.">?</span>
+          <input type="number" name="shortsRPM" min="0" step="0.001" placeholder="e.g. 0.08" />
+        </label>
+        <div class="form-actions">
+          <button type="submit" class="btn primary">Save snapshot</button>
+          <button type="reset" class="btn ghost">Clear</button>
+        </div>
+      </form>
+
+      <div class="card">
+        <div class="card-head"><h3>History</h3><span class="muted" id="snapshotCount"></span></div>
+        <div class="table-scroll">
+          <table class="data-table" id="snapshotTable">
+            <thead>
+              <tr>
+                <th>Date</th><th>Subs</th><th>Long views</th><th>Watch hrs</th>
+                <th>Shorts views (90d)</th><th>Long RPM</th><th>Shorts RPM</th><th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ VIDEOS ============ -->
+    <section class="panel" id="tab-videos">
+      <div class="panel-head">
+        <h2>Videos</h2>
+        <p class="muted">Track individual videos over time. Shorts are tagged separately — they don't count toward long-form watch hours.</p>
+      </div>
+
+      <form class="card form-grid" id="videoForm" autocomplete="off">
+        <h3 class="form-title">Add a video</h3>
+        <label class="col-2">Title
+          <input type="text" name="title" placeholder="e.g. My first tutorial" required />
+        </label>
+        <label>Type
+          <select name="type">
+            <option value="long">Long-form video</option>
+            <option value="short">Short</option>
+          </select>
+        </label>
+        <label>Published date
+          <input type="date" name="publishDate" required />
+        </label>
+        <label>Upload time
+          <span class="help" data-help="What time of day you posted it. Handy for spotting whether morning vs evening uploads perform better.">?</span>
+          <input type="time" name="publishTime" />
+        </label>
+        <label class="col-2">What it's about
+          <span class="help" data-help="A short description of the video's topic — just so you remember what it was when you look back.">?</span>
+          <textarea name="description" rows="2" placeholder="e.g. Beginner guide to setting up your first stream"></textarea>
+        </label>
+        <div class="form-actions">
+          <button type="submit" class="btn primary">Add video</button>
+        </div>
+      </form>
+
+      <div class="card">
+        <div class="card-head"><h3>Your videos</h3></div>
+        <div id="videoList" class="video-list"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>⏰ Best time &amp; day to post</h3>
+          <span class="help" data-help="Averages your videos' views-per-day grouped by the weekday and time-of-day you uploaded them. More videos = more reliable.">?</span>
+        </div>
+        <div id="bestTimeBody"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>🏆 Video leaderboard</h3>
+          <select id="leaderboardMetric">
+            <option value="viewsPerDay">Rank by views/day</option>
+            <option value="latestViews">Rank by total views</option>
+            <option value="engagementRate">Rank by engagement %</option>
+          </select>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table" id="leaderboardTable">
+            <thead><tr><th>#</th><th>Video</th><th>Type</th><th>Views</th><th>Views/day</th><th>Likes %</th><th>Comments %</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card hidden" id="videoSnapshotCard">
+        <div class="card-head">
+          <h3>📊 Log stats for: <span id="activeVideoTitle"></span></h3>
+          <button class="btn ghost small" id="closeVideoSnap">Close</button>
+        </div>
+        <div id="videoLogInfo" class="video-log-info"></div>
+        <form class="form-grid" id="videoSnapshotForm" autocomplete="off">
+          <label>Date of this reading
+            <input type="date" name="date" required />
+          </label>
+          <label>Total views
+            <span class="help" data-help="The video's total view count as of this date (not since last time). Deltas are worked out for you.">?</span>
+            <input type="number" name="views" min="0" step="1" required />
+          </label>
+          <label>Likes <input type="number" name="likes" min="0" step="1" /></label>
+          <label>Comments <input type="number" name="comments" min="0" step="1" /></label>
+          <label>Watch hours <input type="number" name="watchHours" min="0" step="0.1" /></label>
+          <div class="form-actions"><button type="submit" class="btn primary">Save reading</button></div>
+        </form>
+        <div class="table-scroll">
+          <table class="data-table" id="videoSnapTable">
+            <thead><tr><th>Date</th><th>Views</th><th>Likes</th><th>Comments</th><th>Watch hrs</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="chart-wrap"><canvas id="videoChart"></canvas></div>
+      </div>
+    </section>
+
+    <!-- ============ PREDICT ============ -->
+    <section class="panel" id="tab-predict">
+      <div class="panel-head">
+        <h2>Predict</h2>
+        <p class="muted">Pick something to forecast and a target. You'll get a probability and a plain-English explanation.</p>
+      </div>
+
+      <form class="card form-grid" id="predictForm" autocomplete="off">
+        <label>What do you want to predict?
+          <select name="metric" id="predictMetric">
+            <option value="totalSubs">Subscribers</option>
+            <option value="longformViews">Long-form views</option>
+            <option value="watchHoursTotal">Watch hours</option>
+            <option value="shortsViews90d">Shorts engaged views (90-day)</option>
+          </select>
+        </label>
+        <label>Target value
+          <span class="help" data-help="The number you're aiming for, e.g. 1000 subscribers.">?</span>
+          <input type="number" name="target" min="0" step="1" placeholder="e.g. 1000" required />
+        </label>
+        <label>By what date?
+          <input type="date" name="targetDate" required />
+        </label>
+        <label class="col-2">Growth model
+          <span class="help" data-help="Smart uses your logged trend automatically. The others need no logs — pick the shape that matches how you think your channel grows. Growth is rarely a flat line!">?</span>
+          <select name="method" id="predictMethod">
+            <option value="auto">🤖 Smart — figure it out from my logs</option>
+            <option value="compound">📈 Compounding % (snowball — realistic)</option>
+            <option value="scenarios">🎯 Best / likely / worst case</option>
+            <option value="steady">➖ Steady average per day</option>
+            <option value="posting">🎬 From my posting frequency</option>
+          </select>
+        </label>
+        <label class="pfield" data-models="compound scenarios steady posting" id="startValueWrap">Current value now
+          <span class="help" data-help="Where you are today for this metric, e.g. your current subscriber count. Auto-filled from your latest log if you have one.">?</span>
+          <input type="number" name="startValue" min="0" step="1" placeholder="e.g. 640" />
+        </label>
+        <label class="pfield" data-models="compound" id="compoundWrap">Growth % per week
+          <span class="help" data-help="How fast your base grows each week. Channels typically compound 2–10%/week. This bends the curve upward over time instead of a straight line.">?</span>
+          <input type="number" name="weeklyPct" min="0" step="0.1" placeholder="e.g. 5" />
+        </label>
+        <label class="pfield" data-models="scenarios" id="worstWrap">Worst case / day
+          <input type="number" name="worstRate" min="0" step="0.1" placeholder="e.g. 3" />
+        </label>
+        <label class="pfield" data-models="scenarios" id="likelyWrap">Likely / day
+          <input type="number" name="likelyRate" min="0" step="0.1" placeholder="e.g. 6" />
+        </label>
+        <label class="pfield" data-models="scenarios" id="bestWrap">Best case / day
+          <input type="number" name="bestRate" min="0" step="0.1" placeholder="e.g. 10" />
+        </label>
+        <label class="pfield" data-models="steady" id="manualRateWrap">Average per day
+          <span class="help" data-help="Roughly how many you gain per day on average, e.g. 8 subscribers a day.">?</span>
+          <input type="number" name="manualRate" min="0" step="0.1" placeholder="e.g. 8" />
+        </label>
+        <label class="pfield" data-models="posting" id="uploadsWrap">Uploads per week
+          <input type="number" name="uploadsPerWeek" min="0" step="0.5" placeholder="e.g. 3" />
+        </label>
+        <label class="pfield" data-models="posting" id="perUploadWrap">Gained per upload
+          <span class="help" data-help="On average how many of this metric each new video brings in (e.g. 20 subs per video).">?</span>
+          <input type="number" name="perUpload" min="0" step="1" placeholder="e.g. 20" />
+        </label>
+        <div class="form-actions">
+          <button type="submit" class="btn primary">Predict</button>
+        </div>
+      </form>
+
+      <div id="predictResult" class="hidden">
+        <div class="card probability-card">
+          <div class="prob-circle" id="probCircle"><span id="probPct">–</span></div>
+          <div class="prob-text">
+            <h3 id="probHeadline"></h3>
+            <p id="probRange" class="muted"></p>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>What this means</h3></div>
+          <div id="predictExplain" class="explain"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>Projection</h3></div>
+          <div class="chart-wrap"><canvas id="predictChart"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ GOALS ============ -->
+    <section class="panel" id="tab-goals">
+      <div class="panel-head">
+        <h2>Goals &amp; Milestones</h2>
+        <p class="muted">Auto ETAs for the big round numbers, your monetization timeline, and a way to compare "what if" futures.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>🎯 Your goals</h3></div>
+        <form class="form-grid" id="goalForm" autocomplete="off">
+          <label>Metric
+            <select name="metric" id="goalMetric">
+              <option value="totalSubs">Subscribers</option>
+              <option value="longformViews">Long-form views</option>
+              <option value="watchHoursTotal">Watch hours</option>
+              <option value="shortsViews90d">Shorts engaged views</option>
+              <option value="revenue">Monthly revenue ($)</option>
+            </select>
+          </label>
+          <label>Target
+            <input type="number" name="target" id="goalTargetInput" min="0" step="1" placeholder="e.g. 1000" required />
+          </label>
+          <label>By date
+            <span class="help" data-help="Optional for revenue (that's a monthly rate, not a finish line). For the others, a date lets the app judge whether you're on pace.">?</span>
+            <input type="date" name="date" id="goalDateInput" />
+          </label>
+          <div class="form-actions">
+            <button type="submit" class="btn primary">Add goal</button>
+          </div>
+        </form>
+        <div id="goalsList"></div>
+      </div>
+
+      <form class="card form-grid" id="goalsAssume" autocomplete="off">
+        <h3 class="form-title">Growth assumption</h3>
+        <p class="form-note">Sets the pace used for the <strong>milestone timeline</strong> and <strong>what-if chart</strong> below (separate from your goals above).</p>
+        <label>Current subscribers
+          <input type="number" name="current" id="goalCurrent" min="0" step="1" placeholder="e.g. 640" />
+        </label>
+        <label>Based on
+          <span class="help" data-help="Use your logged trend (smart, needs a few snapshots) or type your own growth rate.">?</span>
+          <select id="goalMode">
+            <option value="auto">🤖 My logged trend</option>
+            <option value="perDay">Subs per day</option>
+            <option value="pct">% per week (compounding)</option>
+          </select>
+        </label>
+        <label class="gfield" data-modes="perDay" id="goalRateWrap">Subs per day
+          <input type="number" name="rate" id="goalRate" min="0" step="0.1" placeholder="e.g. 6" />
+        </label>
+        <label class="gfield hidden" data-modes="pct" id="goalPctWrap">% per week
+          <input type="number" name="pct" id="goalPct" min="0" step="0.1" placeholder="e.g. 5" />
+        </label>
+      </form>
+
+      <div class="card">
+        <div class="card-head"><h3>🏁 Milestone timeline</h3></div>
+        <div id="milestoneTimeline" class="milestones"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>💰 Monetization &amp; revenue forecast</h3>
+          <span class="help" data-help="Predicted dates to hit the YouTube Partner Program thresholds, plus a rough monthly earnings estimate at your current pace. Needs a few logged snapshots.">?</span>
+        </div>
+        <div id="monetizationForecast"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>🔀 What-if: compare futures</h3>
+          <button class="btn ghost small" id="addScenario" type="button">+ Add scenario</button>
+        </div>
+        <p class="muted" style="margin-bottom:10px">Give each scenario a name and a subs-per-day rate to see them race on one chart (next 12 months).</p>
+        <div id="whatifRows"></div>
+        <div class="chart-wrap"><canvas id="whatifChart"></canvas></div>
+      </div>
+    </section>
+
+    <!-- ============ CHARTS ============ -->
+    <section class="panel" id="tab-charts">
+      <div class="panel-head">
+        <h2>Charts</h2>
+        <p class="muted">Visualize how each metric is trending over time.</p>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h3>Trend</h3>
+          <select id="chartMetric">
+            <option value="totalSubs">Subscribers</option>
+            <option value="longformViews">Long-form views</option>
+            <option value="watchHoursTotal">Watch hours</option>
+            <option value="shortsViews90d">Shorts engaged views (90-day)</option>
+          </select>
+        </div>
+        <div class="chart-wrap"><canvas id="trendChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Estimated revenue: Shorts vs Long-form</h3>
+          <span class="help" data-help="Shorts typically earn 20–30× less per view than long-form. This split makes that visible.">?</span>
+        </div>
+        <div class="chart-wrap"><canvas id="revenueChart"></canvas></div>
+      </div>
+    </section>
+
+    <!-- ============ BACKUP ============ -->
+    <section class="panel" id="tab-backup">
+      <div class="panel-head">
+        <h2>Backup &amp; Data</h2>
+        <p class="muted">Your data lives in this browser only. Export regularly so you never lose it — and to move between devices.</p>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Export</h3></div>
+        <div class="btn-row">
+          <button class="btn primary" id="exportJSON">Export JSON (full backup)</button>
+          <button class="btn" id="exportCSV">Export CSV (spreadsheet)</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Import / Restore (JSON)</h3></div>
+        <p class="muted">Load a JSON backup. This replaces everything currently stored.</p>
+        <input type="file" id="importFile" accept="application/json,.json" />
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Import snapshots (CSV)</h3></div>
+        <p class="muted">Load channel snapshots from a spreadsheet CSV (same columns as the export: date, totalSubs, longformViews, watchHoursTotal, shortsViews90d, longRPM, shortsRPM). Adds/updates by date — it does <strong>not</strong> wipe your other data.</p>
+        <input type="file" id="importCSVFile" accept=".csv,text/csv" />
+      </div>
+      <div class="card danger-zone">
+        <div class="card-head"><h3>Danger zone</h3></div>
+        <div class="btn-row">
+          <button class="btn ghost" id="loadSample">Reload sample data</button>
+          <button class="btn danger" id="clearAll">Delete everything</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+  <div id="tooltip" class="tooltip hidden"></div>
+
+  <!-- Load order matters: dependencies first, app.js last -->
+  <script src="data/sample.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/stats.js"></script>
+  <script src="js/explain.js"></script>
+  <script src="js/monetization.js"></script>
+  <script src="js/videos.js"></script>
+  <script src="js/insights.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

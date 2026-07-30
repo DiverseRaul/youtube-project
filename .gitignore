@@ -1,0 +1,15 @@
+# OS junk
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+
+# Local exports & backups (your own data — keep it off GitHub)
+*.local.json
+backup*.json
+export*.csv
