@@ -50,7 +50,9 @@
     s = s || {};
     base.channelSnapshots = Array.isArray(s.channelSnapshots) ? s.channelSnapshots : [];
     base.videos = Array.isArray(s.videos) ? s.videos : [];
-    base.videoSnapshots = Array.isArray(s.videoSnapshots) ? s.videoSnapshots : [];
+    // Readings saved before the Shorts stats existed get the new fields at 0.
+    base.videoSnapshots = (Array.isArray(s.videoSnapshots) ? s.videoSnapshots : [])
+      .map(cleanVideoSnapshot);
     if (s.settings) {
       base.settings.goalSubs = num(s.settings.goalSubs, base.settings.goalSubs);
       base.settings.goalDate = s.settings.goalDate || "";
@@ -71,6 +73,31 @@
   function num(v, fallback) {
     var n = parseFloat(v);
     return isFinite(n) ? n : fallback;
+  }
+  // Percentages typed by hand (retention, "stayed to watch") — keep them sane.
+  function clampPct(v) {
+    var n = parseFloat(v);
+    if (!isFinite(n) || n <= 0) return 0;
+    return Math.min(100, n);
+  }
+
+  // One reading for one video. Long-form and Shorts don't share a stat sheet:
+  // watch hours only mean something for long-form, engaged views + "stayed to
+  // watch" only for Shorts. Average view duration is the one retention number
+  // both have, stored as whole seconds.
+  function cleanVideoSnapshot(snap) {
+    snap = snap || {};
+    return {
+      videoId: snap.videoId,
+      date: snap.date,
+      views: num(snap.views, 0),
+      likes: num(snap.likes, 0),
+      comments: num(snap.comments, 0),
+      avgViewDurationSec: Math.max(0, Math.round(num(snap.avgViewDurationSec, 0))),
+      watchHours: num(snap.watchHours, 0),
+      engagedViews: num(snap.engagedViews, 0),
+      stayedToWatch: clampPct(snap.stayedToWatch)
+    };
   }
 
   var GOAL_METRICS = ["totalSubs", "longformViews", "watchHoursTotal", "shortsViews90d", "revenue"];
@@ -168,14 +195,7 @@
   // doubles as "edit this reading".
   function addVideoSnapshot(snap) {
     load();
-    var clean = {
-      videoId: snap.videoId,
-      date: snap.date,
-      views: num(snap.views, 0),
-      likes: num(snap.likes, 0),
-      comments: num(snap.comments, 0),
-      watchHours: num(snap.watchHours, 0)
-    };
+    var clean = cleanVideoSnapshot(snap);
     var idx = -1;
     for (var i = 0; i < state.videoSnapshots.length; i++) {
       if (state.videoSnapshots[i].videoId === clean.videoId && state.videoSnapshots[i].date === clean.date) { idx = i; break; }

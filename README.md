@@ -9,7 +9,7 @@ Everything runs in your browser. **No server, no accounts, no API keys.** You ty
 ## ✨ What it does
 
 - **Daily Log** — type in your channel totals whenever you check them (with Edit ✎ / Delete ✕ on every row).
-- **Videos** — track individual videos over time (Shorts and long-form kept separate).
+- **Videos** — track individual videos over time (Shorts and long-form kept separate, each with the stats that actually apply to it) and **copy any number of them as pasteable text**.
 - **Predict** — pick a goal + date and get a probability, a projection chart, and a clear explanation, using the growth **shape** that fits you (see below).
 - **Goals** — auto ETAs for every milestone (1k → 1M), a monetization + revenue forecast, and a **what-if** compare chart.
 - **Charts** — trend lines for every metric + a Shorts-vs-long-form revenue split.
@@ -19,7 +19,7 @@ Everything runs in your browser. **No server, no accounts, no API keys.** You ty
 - **Goals for any metric** (Goals tab) — set targets for subscribers, long-form views, watch hours, Shorts engaged views, or **monthly revenue ($)**. Each shows a progress bar, a projected date, and an on-track / behind verdict.
 - **"Am I on track?" banner** (Dashboard) — features your main goal and tells you live whether you're on pace, the daily rate you need, and how likely you are to make it.
 - **Best time & day to post** (Videos tab) — since you log each video's upload time, it averages performance by weekday and time-of-day and tells you when your posts do best.
-- **Video leaderboard** (Videos tab) — ranks your videos by views, views/day, or engagement %, with likes/comments rates so you see what resonates.
+- **Video leaderboard** (Videos tab) — ranks your videos by views, views/day, engagement %, **average view duration**, or (for Shorts) **stayed-to-watch %** and **engaged views**, with likes/comments rates so you see what resonates.
 
 ### Growth models (because growth is never a flat line)
 On the **Predict** tab, choose how you think your channel grows:
@@ -81,7 +81,47 @@ Add a **snapshot** each time you check your stats. Fill in what you know — bla
 The more snapshots you add, the smarter the predictions get. Adding a snapshot with a date you already used **overwrites** that day.
 
 ### 2. Videos
-Add each video with a **title**, **type** (Long or Short), **publish date + upload time**, and a short **description** of what it's about (so you remember it later). Click **Log stats** to record its views/likes over time — the panel shows when it went live, how long ago, your last reading, and tells you the growth since last time (e.g. "+1,500 views since Jul 10 (150/day)"). Shorts are tracked separately and never mixed into long-form watch hours.
+Add each video with a **title**, **type** (Long or Short), **publish date + upload time**, and a short **description** of what it's about (so you remember it later). Click **Log stats** to record how it's doing over time — the panel shows when it went live, how long ago, your last reading, and tells you the growth since last time (e.g. "+1,500 views since Jul 10 (150/day)").
+
+**The form asks for different stats depending on the type**, because Shorts and long-form aren't measured the same way:
+
+| Stat | Long | Short | Where to find it in YouTube Studio |
+|---|:--:|:--:|---|
+| Total views | ✅ | ✅ | the video's row / overview |
+| Likes, comments | ✅ | ✅ | overview |
+| **Average view duration** | ✅ | ✅ | Analytics → Engagement — type it as `4:32` (or `0:18` for a Short), or just seconds |
+| **Watch hours** | ✅ | — | Analytics → Overview. Meaningless for Shorts, so it isn't asked for. Leave it blank on long-form and it's worked out for you from views × average view duration |
+| **Engaged views** | — | ✅ | the Short's monetization card — the strict count that actually goes toward the 3M/10M thresholds, **not** the public view number |
+| **Stayed to watch %** | — | ✅ | the Short's retention card — the share who didn't swipe away in the first seconds. The best early signal of whether a Short will get pushed |
+
+Shorts are tracked separately and never mixed into long-form watch hours.
+
+#### 📋 Copy stats (for pasting anywhere, including into an AI)
+Tick the checkbox on **as many videos as you want** — one, two, or all of them — then hit **📋 Copy stats**. (Tick nothing and it copies them all; each video also has its own **📋 Copy** button for just that one.) It goes straight to your clipboard, so you can `Ctrl+V` it into a note, a doc, a message, or a chat with an AI. The panel that opens keeps the text on screen too, in case your browser blocks clipboard access on `file://`.
+
+Each video comes out as labelled lines — plain enough for a person to skim, structured enough for an AI to parse without guessing:
+
+```
+### Video 1 of 2: 60-second pro tip #1
+Type: Short (vertical, <3 min)
+Uploaded: 2026-06-01 at 12:30 (59 days ago)
+Description: Quick Shorts tip on hooking viewers in the first 3 seconds.
+Stats as of 2026-07-29:
+- Views: 700,000
+- Engaged views: 381,000 (54% of public views)
+- Views per day since upload: 13,429
+- Likes: 43,000 (6.14% of views)
+- Comments: 1,700 (0.24% of views)
+- Average view duration: 0:17 (17s)
+- Stayed to watch: 71%
+- Recent growth: +80,000 views between 2026-07-22 and 2026-07-29 (11,429/day)
+History (5 readings):
+  date | views | engaged views | likes | comments | avg view duration | stayed to watch
+  2026-06-10 | 42000 | 21000 | 3100 | 180 | 0:14 | 61%
+  ...
+```
+
+The report opens with a short legend explaining engaged views, stayed-to-watch and watch hours, so whoever (or whatever) reads it doesn't misinterpret the numbers.
 
 ### 3. Predict
 Choose what to forecast, a **target number**, and a **date**. You get:

@@ -26,15 +26,17 @@ window.YT_SAMPLE = {
     { id: "v2", title: "60-second pro tip #1",                  type: "short", publishDate: "2026-06-01", publishTime: "12:30", description: "Quick Shorts tip on hooking viewers in the first 3 seconds." }
   ],
   videoSnapshots: [
-    { videoId: "v1", date: "2026-04-12", views: 3200,  likes: 210, comments: 34, watchHours: 180 },
-    { videoId: "v1", date: "2026-05-01", views: 8100,  likes: 520, comments: 71, watchHours: 460 },
-    { videoId: "v1", date: "2026-06-01", views: 15400, likes: 980, comments: 130, watchHours: 890 },
-    { videoId: "v1", date: "2026-07-01", views: 24800, likes: 1520, comments: 205, watchHours: 1450 },
-    { videoId: "v1", date: "2026-07-22", views: 31200, likes: 1910, comments: 260, watchHours: 1830 },
-    { videoId: "v2", date: "2026-06-10", views: 42000,  likes: 3100, comments: 180, watchHours: 40 },
-    { videoId: "v2", date: "2026-06-24", views: 190000, likes: 12800, comments: 640, watchHours: 165 },
-    { videoId: "v2", date: "2026-07-08", views: 410000, likes: 26500, comments: 1120, watchHours: 350 },
-    { videoId: "v2", date: "2026-07-22", views: 620000, likes: 39000, comments: 1580, watchHours: 520 }
+    /* Long-form (v1): watch hours + average view duration.
+       Shorts (v2): engaged views + "stayed to watch" %, no watch hours. */
+    { videoId: "v1", date: "2026-04-12", views: 3200,  likes: 210,  comments: 34,  avgViewDurationSec: 202, watchHours: 180 },
+    { videoId: "v1", date: "2026-05-01", views: 8100,  likes: 520,  comments: 71,  avgViewDurationSec: 204, watchHours: 460 },
+    { videoId: "v1", date: "2026-06-01", views: 15400, likes: 980,  comments: 130, avgViewDurationSec: 208, watchHours: 890 },
+    { videoId: "v1", date: "2026-07-01", views: 24800, likes: 1520, comments: 205, avgViewDurationSec: 210, watchHours: 1450 },
+    { videoId: "v1", date: "2026-07-22", views: 31200, likes: 1910, comments: 260, avgViewDurationSec: 211, watchHours: 1830 },
+    { videoId: "v2", date: "2026-06-10", views: 42000,  likes: 3100,  comments: 180,  engagedViews: 21000,  avgViewDurationSec: 14, stayedToWatch: 61 },
+    { videoId: "v2", date: "2026-06-24", views: 190000, likes: 12800, comments: 640,  engagedViews: 99000,  avgViewDurationSec: 15, stayedToWatch: 64 },
+    { videoId: "v2", date: "2026-07-08", views: 410000, likes: 26500, comments: 1120, engagedViews: 218000, avgViewDurationSec: 16, stayedToWatch: 67 },
+    { videoId: "v2", date: "2026-07-22", views: 620000, likes: 39000, comments: 1580, engagedViews: 335000, avgViewDurationSec: 16, stayedToWatch: 68 }
   ],
   settings: {
     goalSubs: 1000,

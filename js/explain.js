@@ -28,6 +28,34 @@
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
   }
 
+  // Durations are typed the way YouTube Studio shows them ("4:32", "0:18"),
+  // but a plain seconds number is accepted too. Stored as seconds.
+  function parseDuration(input) {
+    if (input === null || input === undefined) return 0;
+    var s = String(input).trim();
+    if (!s) return 0;
+    var parts = s.split(":"), total = 0, ok = true;
+    parts.forEach(function (p) {
+      var n = Number(p.trim());
+      if (p.trim() === "" || isNaN(n) || n < 0) ok = false;
+      total = total * 60 + (n || 0);
+    });
+    return ok ? Math.round(total) : 0;
+  }
+  function fmtDuration(sec) {
+    sec = Math.round(Number(sec) || 0);
+    if (sec <= 0) return "—";
+    var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    var pad = function (n) { return n < 10 ? "0" + n : String(n); };
+    return h > 0 ? h + ":" + pad(m) + ":" + pad(s) : m + ":" + pad(s);
+  }
+  function fmtPct(n, dp) {
+    n = Number(n) || 0;
+    if (n <= 0) return "—";
+    var f = Math.pow(10, dp == null ? 1 : dp);
+    return (Math.round(n * f) / f) + "%";
+  }
+
   // How good is the fit, in words?
   function r2Quality(r2) {
     if (r2 === null || r2 === undefined) return null;
@@ -110,6 +138,9 @@
     fmt: fmt,
     fmtRate: fmtRate,
     prettyDate: prettyDate,
+    parseDuration: parseDuration,
+    fmtDuration: fmtDuration,
+    fmtPct: fmtPct,
     r2Quality: r2Quality,
     probWord: probWord,
     explainForecast: explainForecast,

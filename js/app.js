@@ -17,6 +17,8 @@
   var fmt = explain.fmt;
 
   var activeVideoId = null;
+  // Videos ticked for "Copy stats" (id -> true). Survives re-renders.
+  var picked = {};
 
   /* ================= boot ================= */
   document.addEventListener("DOMContentLoaded", function () {
@@ -507,12 +509,57 @@
 
     $("#leaderboardMetric").addEventListener("change", renderInsights);
 
+    // Copy stats: nothing ticked means "all of them".
+    $("#copyVideoStats").addEventListener("click", function () {
+      var all = S.getState().videos;
+      var ids = pickedIds();
+      var list = ids.length
+        ? all.filter(function (v) { return ids.indexOf(v.id) >= 0; })
+        : all;
+      copyVideoStats(list, ids.length ? null : "all " + all.length + " videos");
+    });
+    $("#pickAllVideos").addEventListener("click", function () {
+      var all = S.getState().videos;
+      var everything = pickedIds().length === all.length;
+      picked = {};
+      if (!everything) all.forEach(function (v) { picked[v.id] = true; });
+      renderVideos();
+    });
+    $("#copyOutAgain").addEventListener("click", function () {
+      writeClipboard($("#copyOutText").value, function (ok) {
+        toast(ok ? "Copied again." : "Clipboard blocked — select the text and press Ctrl+C.", !ok);
+      });
+    });
+    $("#copyOutClose").addEventListener("click", function () {
+      $("#copyOutCard").classList.add("hidden");
+    });
+
     $("#videoSnapshotForm").addEventListener("submit", function (e) {
       e.preventDefault();
       if (!activeVideoId) return;
       var d = formData($("#videoSnapshotForm"));
       d.videoId = activeVideoId;
       if (!d.date) { toast("Pick a date.", true); return; }
+      var vid = S.getState().videos.filter(function (v) { return v.id === activeVideoId; })[0];
+      var isShort = !!vid && vid.type === "short";
+
+      // Duration is typed as mm:ss; stored as seconds.
+      d.avgViewDurationSec = explain.parseDuration(d.avgViewDuration);
+      var derivedHours = false;
+      if (isShort) {
+        // Watch hours are meaningless for Shorts — never store a stray value.
+        d.watchHours = 0;
+      } else {
+        d.engagedViews = 0;
+        d.stayedToWatch = 0;
+        // Long-form: total watch time = views × average view duration, so fill
+        // it in rather than making them do the arithmetic.
+        if (!String(d.watchHours || "").trim() && d.avgViewDurationSec > 0) {
+          d.watchHours = Math.round((Number(d.views) || 0) * d.avgViewDurationSec / 360) / 10;
+          derivedHours = d.watchHours > 0;
+        }
+      }
+
       // Work out growth since the last reading (before saving this one).
       var prev = S.snapshotsForVideo(activeVideoId);
       var prevLast = prev.length ? prev[prev.length - 1] : null;
@@ -524,6 +571,7 @@
         msg = "Saved — " + (dv >= 0 ? "+" : "") + fmt(dv) + " views since " + explain.prettyDate(prevLast.date) +
           " (" + explain.fmtRate(dv / days) + "/day).";
       }
+      if (derivedHours) msg += " Watch hours estimated at " + explain.fmtRate(d.watchHours) + " from your average view duration.";
       e.target.reset();
       toast(msg);
       openVideo(activeVideoId);
@@ -531,11 +579,72 @@
     });
   }
 
+  /* ---- Copy stats to clipboard ----------------------------------------
+     Tick any number of videos (or none, which means "all") and copy a
+     plain-text report you can paste into a note, a doc, or an AI chat. */
+  function pickedIds() {
+    return Object.keys(picked).filter(function (id) {
+      return S.getState().videos.some(function (v) { return v.id === id; });
+    });
+  }
+
+  function syncPickUI() {
+    var total = S.getState().videos.length;
+    var n = pickedIds().length;
+    var copyBtn = $("#copyVideoStats"), allBtn = $("#pickAllVideos");
+    if (!copyBtn || !allBtn) return;
+    copyBtn.disabled = total === 0;
+    allBtn.disabled = total === 0;
+    allBtn.textContent = (n === total && total > 0) ? "Clear selection" : "Select all";
+    copyBtn.textContent = n > 0
+      ? "📋 Copy stats (" + n + ")"
+      : (total ? "📋 Copy stats (all " + total + ")" : "📋 Copy stats");
+  }
+
+  // Clipboard write with a fallback for file:// and older browsers, where the
+  // async API is often blocked. Either way the text stays on screen to copy.
+  function writeClipboard(text, onDone) {
+    var fallback = function () {
+      var ta = $("#copyOutText");
+      try {
+        ta.removeAttribute("readonly");
+        ta.focus(); ta.select();
+        var ok = document.execCommand && document.execCommand("copy");
+        ta.setAttribute("readonly", "readonly");
+        onDone(!!ok);
+      } catch (e) { onDone(false); }
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { onDone(true); }, fallback);
+    } else {
+      fallback();
+    }
+  }
+
+  function copyVideoStats(list, what) {
+    if (!list || !list.length) { toast("No videos to copy yet.", true); return; }
+    var today = new Date().toISOString().slice(0, 10);
+    var text = vids.exportText(list, S.snapshotsForVideo, today);
+    var card = $("#copyOutCard");
+    card.classList.remove("hidden");
+    $("#copyOutText").value = text;
+    var label = list.length + " video" + (list.length === 1 ? "" : "s");
+    writeClipboard(text, function (ok) {
+      $("#copyOutNote").textContent = ok
+        ? "Copied " + label + " to your clipboard — just paste (Ctrl+V) wherever you need it. The text is below too."
+        : "Your browser blocked the clipboard, so nothing was copied automatically. Click in the box below, select all (Ctrl+A) and copy (Ctrl+C).";
+      toast(ok ? "Copied " + (what ? what : label) + " to clipboard." : "Couldn't reach the clipboard — copy it from the box below.", !ok);
+    });
+    scrollTo(card);
+  }
+
   function renderVideos() {
     var st = S.getState();
     var list = $("#videoList");
     if (!st.videos.length) {
       list.innerHTML = "<p class='muted'>No videos yet. Add one above to start tracking it.</p>";
+      picked = {};
+      syncPickUI();
       return;
     }
     list.innerHTML = st.videos.map(function (v) {
@@ -543,20 +652,48 @@
       var sum = vids.summary(v, snaps);
       var typeTag = "<span class='type-tag " + v.type + "'>" + (v.type === "short" ? "SHORT" : "LONG") + "</span>";
       var when = explain.prettyDate(v.publishDate) + (v.publishTime ? " · " + v.publishTime : "");
-      var stat = sum.hasData
-        ? fmt(sum.latestViews) + " views · " + explain.fmtRate(sum.viewsPerDay) + "/day"
-        : "no readings yet";
+      var stat = "no readings yet";
+      if (sum.hasData) {
+        var bits2 = [fmt(sum.latestViews) + " views", explain.fmtRate(sum.viewsPerDay) + "/day"];
+        if (v.type === "short") {
+          if (sum.latestEngagedViews) bits2.push(fmt(sum.latestEngagedViews) + " engaged");
+          if (sum.stayedToWatch) bits2.push(explain.fmtPct(sum.stayedToWatch) + " stayed");
+        } else if (sum.totalWatchHours) {
+          bits2.push(explain.fmtRate(sum.totalWatchHours) + " watch hrs");
+        }
+        if (sum.avgViewDurationSec) bits2.push(explain.fmtDuration(sum.avgViewDurationSec) + " avg view");
+        stat = bits2.join(" · ");
+      }
       var desc = v.description ? "<div class='vdesc'>" + esc(v.description) + "</div>" : "";
       return "<div class='video-item'>" +
-        "<div class='meta'>" + typeTag +
+        "<div class='meta'>" +
+        "<input type='checkbox' class='pick-box' data-pick='" + v.id + "'" + (picked[v.id] ? " checked" : "") +
+        " title='Tick to include in Copy stats' aria-label='Select " + esc(v.title) + "' />" +
+        typeTag +
         "<div style='min-width:0'><div class='vtitle'>" + esc(v.title) + "</div>" +
         desc +
         "<div class='muted'>" + when + " · " + stat + "</div></div></div>" +
         "<div class='btn-row'>" +
         "<button class='btn small' data-open='" + v.id + "'>Log stats</button>" +
+        "<button class='btn ghost small' data-copyv='" + v.id + "'>📋 Copy</button>" +
         "<button class='btn ghost small' data-delv='" + v.id + "'>Delete</button>" +
         "</div></div>";
     }).join("");
+
+    $$("[data-pick]", list).forEach(function (cb) {
+      cb.addEventListener("change", function () {
+        if (cb.checked) picked[cb.getAttribute("data-pick")] = true;
+        else delete picked[cb.getAttribute("data-pick")];
+        syncPickUI();
+      });
+    });
+    $$("[data-copyv]", list).forEach(function (b) {
+      b.addEventListener("click", function () {
+        var v = S.getState().videos.filter(function (x) { return x.id === b.getAttribute("data-copyv"); });
+        copyVideoStats(v, "this video");
+      });
+    });
+    syncPickUI();
 
     $$("[data-open]", list).forEach(function (b) {
       b.addEventListener("click", function () { openVideo(b.getAttribute("data-open")); });
@@ -614,14 +751,20 @@
     var rows = ins.leaderboard(videos2, snapsOf, today, metric);
     var tb = $("#leaderboardTable tbody");
     if (!rows.length) {
-      tb.innerHTML = "<tr><td colspan='7' class='muted'>No videos with readings yet — log stats on a video first.</td></tr>";
+      tb.innerHTML = "<tr><td colspan='9' class='muted'>No videos with readings yet — log stats on a video first.</td></tr>";
     } else {
       tb.innerHTML = rows.map(function (r, i) {
         var v = r.video, p = r.perf;
         var medal = i === 0 ? "🥇" : (i === 1 ? "🥈" : (i === 2 ? "🥉" : (i + 1)));
+        // Views column shows engaged views underneath for Shorts — that's the
+        // number that counts, and it's usually well below the public count.
+        var viewsCell = fmt(p.latestViews) +
+          (p.engagedViews ? "<div class='muted sub-cell'>" + fmt(p.engagedViews) + " engaged</div>" : "");
         return "<tr><td>" + medal + "</td><td style='text-align:left'>" + esc(v.title) + "</td>" +
           "<td><span class='type-tag " + v.type + "'>" + (v.type === "short" ? "SHORT" : "LONG") + "</span></td>" +
-          "<td>" + fmt(p.latestViews) + "</td><td>" + explain.fmtRate(p.viewsPerDay) + "</td>" +
+          "<td>" + viewsCell + "</td><td>" + explain.fmtRate(p.viewsPerDay) + "</td>" +
+          "<td>" + explain.fmtDuration(p.avgViewDurationSec) + "</td>" +
+          "<td>" + (v.type === "short" ? explain.fmtPct(p.stayedToWatch) : "—") + "</td>" +
           "<td>" + p.likeRate.toFixed(1) + "%</td><td>" + p.commentRate.toFixed(2) + "%</td></tr>";
       }).join("");
     }
@@ -653,22 +796,64 @@
     bits.push("<div class='muted'>" + line + "</div>");
     $("#videoLogInfo").innerHTML = bits.join("");
 
-    // Prefill inputs with the last reading as a starting point (easy to bump up).
+    // Only ask for the stats that mean something for this video's type.
+    var isShort = video.type === "short";
     var f = $("#videoSnapshotForm");
+    $$(".vfield", f).forEach(function (el) {
+      var mine = el.getAttribute("data-vtype") === video.type;
+      el.classList.toggle("hidden", !mine);
+      // Clear what's hidden so nothing leaks across videos of the other type.
+      if (!mine) $$("input", el).forEach(function (inp) { inp.value = ""; });
+    });
+
+    // Prefill inputs with the last reading as a starting point (easy to bump up).
     if (last) {
-      f.querySelector("[name=views]").placeholder = "last: " + fmt(last.views);
-      f.querySelector("[name=likes]").placeholder = "last: " + fmt(last.likes);
-      f.querySelector("[name=comments]").placeholder = "last: " + fmt(last.comments);
-      f.querySelector("[name=watchHours]").placeholder = "last: " + fmt(last.watchHours);
+      var ph = function (name, txt) {
+        var el = f.querySelector("[name=" + name + "]");
+        if (el) el.placeholder = "last: " + txt;
+      };
+      ph("views", fmt(last.views));
+      ph("likes", fmt(last.likes));
+      ph("comments", fmt(last.comments));
+      ph("avgViewDuration", explain.fmtDuration(last.avgViewDurationSec));
+      if (isShort) {
+        ph("engagedViews", fmt(last.engagedViews));
+        ph("stayedToWatch", explain.fmtPct(last.stayedToWatch));
+      } else {
+        ph("watchHours", fmt(last.watchHours));
+      }
     }
 
+    var dash = function (v, render) { return v ? render(v) : "—"; };
+    var cols = [
+      { th: "Date", get: function (s) { return explain.prettyDate(s.date); } },
+      { th: "Views", get: function (s) { return fmt(s.views); } }
+    ];
+    if (isShort) {
+      cols.push({ th: "Engaged views", get: function (s) { return dash(s.engagedViews, fmt); } });
+    }
+    cols.push(
+      { th: "Likes", get: function (s) { return fmt(s.likes); } },
+      { th: "Comments", get: function (s) { return fmt(s.comments); } },
+      { th: "Avg view", get: function (s) { return explain.fmtDuration(s.avgViewDurationSec); } }
+    );
+    if (isShort) {
+      cols.push({ th: "Stayed", get: function (s) { return explain.fmtPct(s.stayedToWatch); } });
+    } else {
+      cols.push({ th: "Watch hrs", get: function (s) { return dash(s.watchHours, explain.fmtRate); } });
+    }
+
+    $("#videoSnapTable thead tr").innerHTML =
+      cols.map(function (c) { return "<th>" + c.th + "</th>"; }).join("") + "<th></th>";
+
     var tbody = $("#videoSnapTable tbody");
-    tbody.innerHTML = snaps.slice().reverse().map(function (s) {
-      return "<tr><td>" + explain.prettyDate(s.date) + "</td><td>" + fmt(s.views) + "</td><td>" +
-        fmt(s.likes) + "</td><td>" + fmt(s.comments) + "</td><td>" + fmt(s.watchHours) +
-        "</td><td><button class='row-edit' data-vsedit='" + s.date + "' title='Edit'>✎</button> " +
-        "<button class='row-del' data-vsdate='" + s.date + "'>✕</button></td></tr>";
-    }).join("");
+    tbody.innerHTML = snaps.length
+      ? snaps.slice().reverse().map(function (s) {
+        return "<tr>" + cols.map(function (c) { return "<td>" + c.get(s) + "</td>"; }).join("") +
+          "<td><button class='row-edit' data-vsedit='" + s.date + "' title='Edit'>✎</button> " +
+          "<button class='row-del' data-vsdate='" + s.date + "'>✕</button></td></tr>";
+      }).join("")
+      : "<tr><td colspan='" + (cols.length + 1) + "' class='muted'>No readings yet — fill in the form above.</td></tr>";
     $$(".row-del", tbody).forEach(function (btn) {
       btn.addEventListener("click", function () {
         S.deleteVideoSnapshot(id, btn.getAttribute("data-vsdate"));
@@ -679,11 +864,22 @@
       btn.addEventListener("click", function () {
         var s = S.snapshotsForVideo(id).filter(function (x) { return x.date === btn.getAttribute("data-vsedit"); })[0];
         if (!s) return;
-        var f = $("#videoSnapshotForm");
-        f.date.value = s.date; f.views.value = s.views; f.likes.value = s.likes;
-        f.comments.value = s.comments; f.watchHours.value = s.watchHours;
-        f.views.focus();
-        toast("Editing " + explain.prettyDate(s.date) + " — change the numbers and press Add reading.");
+        var form = $("#videoSnapshotForm");
+        var set = function (name, val) {
+          var el = form.querySelector("[name=" + name + "]");
+          if (el) el.value = (val === 0 || val) ? val : "";
+        };
+        set("date", s.date); set("views", s.views); set("likes", s.likes);
+        set("comments", s.comments);
+        set("avgViewDuration", s.avgViewDurationSec ? explain.fmtDuration(s.avgViewDurationSec) : "");
+        if (isShort) {
+          set("engagedViews", s.engagedViews || "");
+          set("stayedToWatch", s.stayedToWatch || "");
+        } else {
+          set("watchHours", s.watchHours || "");
+        }
+        form.querySelector("[name=views]").focus();
+        toast("Editing " + explain.prettyDate(s.date) + " — change the numbers and press Save reading.");
       });
     });
     charts.video("videoChart", vids.viewPoints(snaps), video.title, video.type === "short");
@@ -822,7 +1018,7 @@
     var metric = $("#chartMetric").value;
     var labelMap = {
       totalSubs: "Subscribers", longformViews: "Long-form views",
-      watchHoursTotal: "Watch hours", shortsViews90d: "Shorts views (90d)"
+      watchHoursTotal: "Watch hours", shortsViews90d: "Shorts engaged views (90d)"
     };
     var colorMap = {
       totalSubs: "--brand", longformViews: "--long",

@@ -35,6 +35,8 @@
     var likes = last ? Number(last.likes) || 0 : 0;
     var comments = last ? Number(last.comments) || 0 : 0;
     var daysLive = video.publishDate ? Math.max(1, stats.daysBetween(video.publishDate, today)) : 1;
+    var isShort = video.type === "short";
+    var engaged = last ? Number(last.engagedViews) || 0 : 0;
     return {
       hasData: !!last,
       latestViews: views,
@@ -42,7 +44,16 @@
       daysLive: daysLive,
       likeRate: views > 0 ? likes / views * 100 : 0,
       commentRate: views > 0 ? comments / views * 100 : 0,
-      engagementRate: views > 0 ? (likes + comments) / views * 100 : 0
+      engagementRate: views > 0 ? (likes + comments) / views * 100 : 0,
+      // Retention: comparable across both types.
+      avgViewDurationSec: last ? Number(last.avgViewDurationSec) || 0 : 0,
+      // Shorts-only signals.
+      engagedViews: isShort ? engaged : 0,
+      stayedToWatch: isShort && last ? Number(last.stayedToWatch) || 0 : 0,
+      // What share of public views YouTube counted as engaged (Shorts only).
+      engagedShare: isShort && views > 0 ? engaged / views * 100 : 0,
+      // Long-form only.
+      watchHours: !isShort && last ? Number(last.watchHours) || 0 : 0
     };
   }
 

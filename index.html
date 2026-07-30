@@ -154,8 +154,27 @@
       </form>
 
       <div class="card">
-        <div class="card-head"><h3>Your videos</h3></div>
+        <div class="card-head">
+          <h3>Your videos</h3>
+          <div class="btn-row">
+            <button class="btn ghost small" id="pickAllVideos">Select all</button>
+            <button class="btn small" id="copyVideoStats">📋 Copy stats</button>
+            <span class="help" data-help="Tick the videos you want, then copy. You get a plain-text report — title, description, upload date, type, views and the full history — ready to paste anywhere: a note, a spreadsheet, or an AI chat to ask questions about your numbers.">?</span>
+          </div>
+        </div>
         <div id="videoList" class="video-list"></div>
+      </div>
+
+      <div class="card hidden" id="copyOutCard">
+        <div class="card-head">
+          <h3>📋 Copied stats</h3>
+          <div class="btn-row">
+            <button class="btn small" id="copyOutAgain">Copy again</button>
+            <button class="btn ghost small" id="copyOutClose">Close</button>
+          </div>
+        </div>
+        <p class="muted" id="copyOutNote"></p>
+        <textarea id="copyOutText" class="copy-out" rows="14" readonly spellcheck="false"></textarea>
       </div>
 
       <div class="card">
@@ -173,11 +192,14 @@
             <option value="viewsPerDay">Rank by views/day</option>
             <option value="latestViews">Rank by total views</option>
             <option value="engagementRate">Rank by engagement %</option>
+            <option value="avgViewDurationSec">Rank by avg view duration</option>
+            <option value="stayedToWatch">Rank by stayed to watch % (Shorts)</option>
+            <option value="engagedViews">Rank by engaged views (Shorts)</option>
           </select>
         </div>
         <div class="table-scroll">
           <table class="data-table" id="leaderboardTable">
-            <thead><tr><th>#</th><th>Video</th><th>Type</th><th>Views</th><th>Views/day</th><th>Likes %</th><th>Comments %</th></tr></thead>
+            <thead><tr><th>#</th><th>Video</th><th>Type</th><th>Views</th><th>Views/day</th><th>Avg view</th><th>Stayed</th><th>Likes %</th><th>Comments %</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -197,14 +219,29 @@
             <span class="help" data-help="The video's total view count as of this date (not since last time). Deltas are worked out for you.">?</span>
             <input type="number" name="views" min="0" step="1" required />
           </label>
+          <label class="vfield" data-vtype="short">Engaged views
+            <span class="help" data-help="Studio → Analytics → the monetization card for this Short. Engaged views are counted the strict way and are what actually goes toward the 3M / 10M Shorts thresholds — the public view count does not.">?</span>
+            <input type="number" name="engagedViews" min="0" step="1" />
+          </label>
           <label>Likes <input type="number" name="likes" min="0" step="1" /></label>
           <label>Comments <input type="number" name="comments" min="0" step="1" /></label>
-          <label>Watch hours <input type="number" name="watchHours" min="0" step="0.1" /></label>
+          <label>Average view duration
+            <span class="help" data-help="Studio → Analytics → Engagement. Type it as YouTube shows it — mm:ss like 4:32 (or 0:18 for a Short) — or just a number of seconds.">?</span>
+            <input type="text" name="avgViewDuration" inputmode="numeric" placeholder="e.g. 4:32" />
+          </label>
+          <label class="vfield" data-vtype="short">Stayed to watch %
+            <span class="help" data-help="Studio → this Short's retention card: the share of viewers who did not swipe away in the first few seconds. The single best signal of whether a Short will get pushed.">?</span>
+            <input type="number" name="stayedToWatch" min="0" max="100" step="0.1" placeholder="e.g. 68" />
+          </label>
+          <label class="vfield" data-vtype="long">Watch hours
+            <span class="help" data-help="Long-form only — this is what feeds the 4,000-hour monetization path. Leave it blank and it's worked out for you from views × average view duration.">?</span>
+            <input type="number" name="watchHours" min="0" step="0.1" />
+          </label>
           <div class="form-actions"><button type="submit" class="btn primary">Save reading</button></div>
         </form>
         <div class="table-scroll">
           <table class="data-table" id="videoSnapTable">
-            <thead><tr><th>Date</th><th>Views</th><th>Likes</th><th>Comments</th><th>Watch hrs</th><th></th></tr></thead>
+            <thead><tr></tr></thead>
             <tbody></tbody>
           </table>
         </div>
