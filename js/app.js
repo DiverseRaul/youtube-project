@@ -439,6 +439,7 @@
       form.reset();
       $("input[name=date]", form).value = new Date().toISOString().slice(0, 10);
       toast("Snapshot saved.");
+      noteDemoCleared();
       renderAll();
     });
   }
@@ -503,6 +504,7 @@
       vform.reset();
       $("input[name=publishDate]", vform).value = new Date().toISOString().slice(0, 10);
       toast("Video added — log its first reading below.");
+      noteDemoCleared();
       renderVideos();
       openVideo(newId);
     });
@@ -583,6 +585,7 @@
       if (derivedHours) msg += " Watch hours estimated at " + explain.fmtRate(d.watchHours) + " from your average view duration.";
       e.target.reset();
       toast(msg);
+      noteDemoCleared();
       openVideo(activeVideoId);
       renderVideos();
     });
@@ -1504,6 +1507,16 @@
 
     sync.init();
     renderSyncUI(sync.status());
+  }
+
+  // The sample data disappears the first time you enter something real —
+  // say so, or it looks like the app lost your numbers.
+  function noteDemoCleared() {
+    if (!S.consumeDemoCleared()) return false;
+    setTimeout(function () {
+      toast("Sample data cleared — from here on it's all yours.");
+    }, 2200);
+    return true;
   }
 
   // "3 minutes ago" — good enough for a sync timestamp.

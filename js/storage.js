@@ -17,6 +17,10 @@
       tombstones: [],
       // When this device last changed anything — used to settle merge conflicts.
       lastEdit: "",
+      // True while the browser is still showing the bundled demo data and the
+      // user hasn't typed anything of their own. Demo rows must never be
+      // uploaded to an account or merged into real data.
+      isSample: false,
       settings: {
         goalSubs: 1000,
         goalDate: "",
@@ -43,9 +47,11 @@
         return state;
       } catch (e) { /* corrupt — fall through to sample */ }
     }
-    // First run (or unreadable): seed from bundled sample if present.
+    // First run (or unreadable): seed from bundled sample if present. Saved
+    // silently so it doesn't look like an edit this device made.
     state = window.YT_SAMPLE ? normalize(clone(window.YT_SAMPLE)) : emptyState();
-    save();
+    state.isSample = !!window.YT_SAMPLE;
+    save({ silent: true });
     return state;
   }
 
@@ -62,6 +68,7 @@
       .filter(function (t) { return t && t.k && t.at; })
       .map(function (t) { return { k: String(t.k), at: String(t.at) }; });
     base.lastEdit = s.lastEdit || "";
+    base.isSample = s.isSample === true;
     if (s.settings) {
       base.settings.goalSubs = num(s.settings.goalSubs, base.settings.goalSubs);
       base.settings.goalDate = s.settings.goalDate || "";
@@ -147,7 +154,12 @@
 
   function save(opts) {
     opts = opts || {};
-    if (!opts.silent) state.lastEdit = nowISO();
+    if (!opts.silent) {
+      state.lastEdit = nowISO();
+      // Touching the actual data means this is now the user's own — but
+      // flipping the theme shouldn't promote a screen of demo rows.
+      if (!opts.keepSample) state.isSample = false;
+    }
     try { localStorage.setItem(KEY, JSON.stringify(state)); }
     catch (e) { console.warn("Could not save to localStorage:", e); }
     if (!opts.silent) {
@@ -173,6 +185,28 @@
     state.tombstones = state.tombstones.filter(function (t) { return t.k !== k; });
   }
 
+  /* ---- Handing the app over from demo to real data ----------------------
+     A first-time visitor sees the bundled sample so the app isn't an empty
+     shell. The moment they enter something of their own, the demo has to go:
+     otherwise their charts mix 866 invented subscribers with their real 7,
+     and (with sync on) the invented ones get uploaded to their account. */
+  var demoCleared = false;
+  function beginRealEdit() {
+    if (!state.isSample) return;
+    state.channelSnapshots = [];
+    state.videos = [];
+    state.videoSnapshots = [];
+    state.tombstones = [];
+    state.isSample = false;
+    demoCleared = true;
+  }
+  // Read-and-reset, so the UI can mention it exactly once.
+  function consumeDemoCleared() {
+    var was = demoCleared;
+    demoCleared = false;
+    return was;
+  }
+
   function getState() { return load(); }
 
   function replaceState(newState, opts) {
@@ -183,7 +217,8 @@
 
   function reset() {
     state = window.YT_SAMPLE ? normalize(clone(window.YT_SAMPLE)) : emptyState();
-    save();
+    state.isSample = !!window.YT_SAMPLE;
+    save({ silent: true });
     return state;
   }
 
@@ -197,6 +232,7 @@
   // One snapshot per date; adding an existing date overwrites it.
   function upsertSnapshot(snap) {
     load();
+    beginRealEdit();
     var idx = -1;
     for (var i = 0; i < state.channelSnapshots.length; i++) {
       if (state.channelSnapshots[i].date === snap.date) { idx = i; break; }
@@ -221,7 +257,7 @@
     load();
     state.channelSnapshots = state.channelSnapshots.filter(function (s) { return s.date !== date; });
     tombstone("snap", date);
-    save();
+    save({ keepSample: true });
   }
 
   function latestSnapshot() {
@@ -232,6 +268,7 @@
   /* -------- Videos -------- */
   function addVideo(v) {
     load();
+    beginRealEdit();
     var id = "v" + Date.now() + Math.floor(Math.random() * 1000);
     var clean = cleanVideo(v);
     clean.id = id;
@@ -250,7 +287,7 @@
       Object.keys(patch || {}).forEach(function (k) { merged[k] = patch[k]; });
       merged.id = id;
       state.videos[i] = cleanVideo(merged);
-      save();
+      save({ keepSample: true });
       return state.videos[i];
     }
     return null;
@@ -261,12 +298,13 @@
     state.videoSnapshots = state.videoSnapshots.filter(function (s) { return s.videoId !== id; });
     // One tombstone for the video; its readings are dropped wherever it lands.
     tombstone("video", id);
-    save();
+    save({ keepSample: true });
   }
   // Upsert by (videoId, date): re-adding the same date overwrites, so it
   // doubles as "edit this reading".
   function addVideoSnapshot(snap) {
     load();
+    beginRealEdit();
     var clean = cleanVideoSnapshot(snap);
     var idx = -1;
     for (var i = 0; i < state.videoSnapshots.length; i++) {
@@ -284,7 +322,7 @@
       return !(s.videoId === videoId && s.date === date);
     });
     tombstone("vsnap", videoId + "|" + date);
-    save();
+    save({ keepSample: true });
   }
   function snapshotsForVideo(id) {
     load();
@@ -295,7 +333,7 @@
   function updateSettings(patch) {
     load();
     for (var k in patch) if (patch.hasOwnProperty(k)) state.settings[k] = patch[k];
-    save();
+    save({ keepSample: true });
   }
 
   function addGoal(g) {
@@ -385,6 +423,8 @@
     getState: getState,
     replaceState: replaceState,
     onChange: onChange,
+    isSampleData: function () { return load().isSample === true; },
+    consumeDemoCleared: consumeDemoCleared,
     reset: reset,
     clear: clear,
     upsertSnapshot: upsertSnapshot,

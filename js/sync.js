@@ -295,13 +295,28 @@
     }
     setStatus("syncing", "Syncing…");
     var local = S.getState();
+    // A browser that has only ever shown the bundled demo data holds nothing
+    // worth keeping. Merging it would smear sample rows across every device,
+    // so it gets replaced by the account's data and is never uploaded.
+    var localIsDemo = S.isSampleData();
     return pull().then(function (remote) {
-      var merged = remote ? mergeStates(local, remote) : local;
-      if (remote) {
+      if (localIsDemo) {
+        if (!remote) {
+          // Nothing either side: leave the account empty until real data exists.
+          status.lastSyncedAt = new Date().toISOString();
+          setStatus("idle", "Signed in. Add your first real numbers and they'll sync.");
+          return { ok: true, pulled: false, skipped: "demo-data" };
+        }
         // silent: this came from the server, so don't stamp it as a local edit
         // and don't trigger another push.
-        S.replaceState(merged, { silent: true });
+        S.replaceState(remote, { silent: true });
+        status.lastSyncedAt = new Date().toISOString();
+        setStatus("idle", "");
+        notifyPulled();
+        return { ok: true, pulled: true, replacedDemo: true };
       }
+      var merged = remote ? mergeStates(local, remote) : local;
+      if (remote) S.replaceState(merged, { silent: true });
       return push(merged).then(function () {
         status.lastSyncedAt = new Date().toISOString();
         setStatus("idle", "");
@@ -327,10 +342,10 @@
     if (!configured()) { setStatus("off", ""); return; }
     // Any local edit schedules a push, coalesced so typing isn't chatty.
     S.onChange(function () {
-      if (!user()) return;
+      if (!user() || S.isSampleData()) return;
       clearTimeout(pushTimer);
       pushTimer = setTimeout(function () {
-        if (!user()) return;
+        if (!user() || S.isSampleData()) return;
         setStatus("syncing", "Saving to your account…");
         push(S.getState()).then(function () {
           status.lastSyncedAt = new Date().toISOString();

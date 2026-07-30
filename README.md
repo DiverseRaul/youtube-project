@@ -184,9 +184,10 @@ It needs somewhere to keep the data. That's a free **Supabase** project — you 
 
 1. Sign up at [supabase.com](https://supabase.com) and create a project (the free tier is plenty — this stores a few kilobytes).
 2. Open **SQL Editor → New query**, paste the contents of [`sql/setup.sql`](sql/setup.sql), and hit **Run**. That creates the table and the security rules that stop any account reading another's data.
-3. Open **Settings → API** and copy the **Project URL** and the **anon public** key.
-4. Either paste them into `js/config.js` and push (best — then every device you open the site on is already set up), or paste them into the app itself: **Backup → Sync across devices**.
-5. In the app, enter an email + password and hit **Create account**. On your other device, open the same site and **Sign in** with the same details.
+3. Go to **Authentication → Sign In / Providers → Email** and turn **Confirm email** *off*. It's on by default, and with it on "Create account" won't sign you in until you've clicked a link in your inbox. (Leave it on if you'd rather — the app tells you to go and confirm.)
+4. Open **Project Settings → API** and copy the **Project URL** plus the key labelled **`anon` / `public`** (newer projects call it a *publishable* key and it starts `sb_publishable_` — same thing). **Not** `service_role`.
+5. Either paste them into `js/config.js` and push (best — then every device you open the site on is already set up), or paste them into the app itself: **Backup → Sync across devices**.
+6. In the app, enter an email + password and hit **Create account**. On your other device, open the same site and **Sign in** with the same details.
 
 > **Is it safe to commit the anon key?** Yes — that key is designed to be public, and it's what `sql/setup.sql` assumes. The row-level security policies mean a signed-in account can only ever read and write **its own** row. Never paste the `service_role` key anywhere; that one *is* a secret.
 
