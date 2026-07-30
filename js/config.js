@@ -14,6 +14,6 @@
    device that loads your site is already configured.
    ============================================================ */
 window.YT_CONFIG = {
-  supabaseUrl: "",      // e.g. "https://abcdefghijk.supabase.co"
-  supabaseAnonKey: ""   // the long "anon public" key from Settings → API
+  supabaseUrl: "https://cxzbglsppxsvrwqdqhmo.supabase.co",      // e.g. "https://abcdefghijk.supabase.co"
+  supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN4emJnbHNwcHhzdnJ3cWRxaG1vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU0MzQ2MDYsImV4cCI6MjEwMTAxMDYwNn0.656_YxE5pem8kGCRK7Y06O5mHvRNtutt2zGROlCQrcE"   // the long "anon public" key from Settings → API
 };
